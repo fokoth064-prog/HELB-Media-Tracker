@@ -79,8 +79,10 @@ st.title("📰 Mentions — Media Coverage")
 
 for i, row in df.iterrows():
     with st.container():
-        # Always show colored div with tonality
-        bg_color = COLORS.get(row["TONALITY"], "#ffffff")
+        # Always use current tonality from session_state for color
+        current_tonality = st.session_state["mentions_df"].at[i, "TONALITY"]
+        bg_color = COLORS.get(current_tonality, "#ffffff")
+
         st.markdown(
             f"""
             <div style="background-color:{bg_color}; padding:15px; border-radius:8px; margin-bottom:10px;">
@@ -88,7 +90,7 @@ for i, row in df.iterrows():
                 <b>Source:</b> {row['SOURCE']}<br>
                 <b>Title:</b> {row['TITLE']}<br>
                 <b>Summary:</b> {row['SUMMARY']}<br>
-                <b>Tonality:</b> {row['TONALITY']}
+                <b>Tonality:</b> {current_tonality}
             </div>
             """,
             unsafe_allow_html=True,
@@ -99,10 +101,10 @@ for i, row in df.iterrows():
             new_tonality = st.selectbox(
                 f"Update Tonality for mention #{i+1}",
                 options=["Positive", "Neutral", "Negative"],
-                index=["Positive","Neutral","Negative"].index(row["TONALITY"]) if row["TONALITY"] in ["Positive","Neutral","Negative"] else 1,
+                index=["Positive","Neutral","Negative"].index(current_tonality) if current_tonality in ["Positive","Neutral","Negative"] else 1,
                 key=f"tonality_{i}"
             )
-            if new_tonality != row["TONALITY"]:
+            if new_tonality != current_tonality:
                 st.session_state["mentions_df"].at[i, "TONALITY"] = new_tonality
 
         # Read full story link
@@ -110,4 +112,3 @@ for i, row in df.iterrows():
             st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
 
         st.markdown("---")
-
