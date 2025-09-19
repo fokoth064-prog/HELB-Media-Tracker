@@ -61,7 +61,7 @@ if "tonality_map" not in st.session_state:
     st.session_state["tonality_map"] = {i: df.at[i, "TONALITY"] for i in df.index}
 
 COLORS = {
-    "Positive": "#a3d9a5",
+    "Positive": "#3b8132",
     "Neutral": "#f3f3f3",
     "Negative": "#ff9999"
 }
