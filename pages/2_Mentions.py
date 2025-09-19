@@ -4,12 +4,11 @@ import pandas as pd
 
 # ---------- CONFIG ----------
 CSV_URL = "https://docs.google.com/spreadsheets/d/10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ/export?format=csv"
+EDITOR_PASSWORD = "MyHardSecret123"
 
 # ---------- PASSWORD ----------
-EDITOR_PASSWORD = "MyHardSecret123"
 password = st.sidebar.text_input("Enter edit password", type="password")
 is_editor = password == EDITOR_PASSWORD
-
 if is_editor:
     st.sidebar.success("Editor mode ✅")
 else:
@@ -20,7 +19,6 @@ else:
 def load_data():
     df = pd.read_csv(CSV_URL)
     df.columns = [c.strip().lower() for c in df.columns]
-
     if "published" in df.columns:
         df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce", utc=True)
         try:
@@ -33,12 +31,10 @@ def load_data():
         df["published_parsed"] = pd.NaT
         df["DATE"] = ""
         df["TIME"] = ""
-
     for col in ["title", "summary", "source", "tonality", "link"]:
         if col not in df.columns:
             df[col] = ""
         df[col] = df[col].fillna("")
-
     rename_map = {
         "title": "TITLE",
         "summary": "SUMMARY",
@@ -52,63 +48,59 @@ def load_data():
 # ---------- SESSION STATE ----------
 if "mentions_df" not in st.session_state:
     st.session_state["mentions_df"] = load_data()
-
 df = st.session_state["mentions_df"]
+
 if df.empty:
-    st.info("No data available. Check the CSV URL.")
+    st.info("No data available.")
     st.stop()
 
-# Sort newest first
 df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
 
-# Store tonality separately for instant updates
+# Tonality mapping
 if "tonality_map" not in st.session_state:
-    st.session_state["tonality_map"] = dict(zip(df.index, df["TONALITY"]))
+    st.session_state["tonality_map"] = {i: df.at[i, "TONALITY"] for i in df.index}
 
-# ---------- COLOR MAP ----------
 COLORS = {
-    "Positive": "#a3d9a5",  # darker green
+    "Positive": "#a3d9a5",
     "Neutral": "#f3f3f3",
-    "Negative": "#ff9999"   # darker red
+    "Negative": "#ff9999"
 }
 
-# ---------- DISPLAY ----------
 st.title("📰 Mentions — Media Coverage")
 
-for i in df.index:
-    row = df.loc[i]
-
-    # Editor mode: update tonality first
-    if is_editor:
-        current_tonality = st.session_state["tonality_map"][i]
-        new_tonality = st.selectbox(
-            f"Update Tonality for mention #{i+1}",
+# ---------- EDITOR DROPDOWNS ----------
+if is_editor:
+    st.subheader("Edit Tonality")
+    for i in df.index:
+        row = df.loc[i]
+        current = st.session_state["tonality_map"][i]
+        new_val = st.selectbox(
+            f"{i+1}. {row['TITLE'][:50]}...",
             options=["Positive", "Neutral", "Negative"],
-            index=["Positive","Neutral","Negative"].index(current_tonality) if current_tonality in ["Positive","Neutral","Negative"] else 1,
+            index=["Positive","Neutral","Negative"].index(current) if current in ["Positive","Neutral","Negative"] else 1,
             key=f"tonality_{i}"
         )
-        if new_tonality != current_tonality:
-            st.session_state["tonality_map"][i] = new_tonality
+        if new_val != current:
+            st.session_state["tonality_map"][i] = new_val
 
-    # Display div using updated tonality
-    display_tonality = st.session_state["tonality_map"][i]
-    bg_color = COLORS.get(display_tonality, "#ffffff")
-
+st.subheader("Mentions List")
+# ---------- DISPLAY MENTIONS ----------
+for i in df.index:
+    row = df.loc[i]
+    tonality = st.session_state["tonality_map"][i]
+    bg = COLORS.get(tonality, "#ffffff")
     st.markdown(
         f"""
-        <div style="background-color:{bg_color}; padding:15px; border-radius:8px; margin-bottom:10px;">
+        <div style="background-color:{bg}; padding:15px; border-radius:8px; margin-bottom:10px;">
             <b>{i+1}. {row['DATE']} {row['TIME']}</b><br>
             <b>Source:</b> {row['SOURCE']}<br>
             <b>Title:</b> {row['TITLE']}<br>
             <b>Summary:</b> {row['SUMMARY']}<br>
-            <b>Tonality:</b> {display_tonality}
+            <b>Tonality:</b> {tonality}
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-    # Read full story link
     if row["LINK"].startswith("http"):
         st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
-
     st.markdown("---")
