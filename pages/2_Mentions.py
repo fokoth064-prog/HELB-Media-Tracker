@@ -55,11 +55,11 @@ if df.empty:
 
 df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
 
-# Tonality mapping
+# Tonality mapping for live updates
 if "tonality_map" not in st.session_state:
     st.session_state["tonality_map"] = {i: df.at[i, "TONALITY"] for i in df.index}
 
-# Color codes
+# ---------- COLOR MAP ----------
 COLORS = {
     "Positive": "#3b8132",
     "Neutral": "#6E6F71",
@@ -78,7 +78,7 @@ if is_editor:
             new_val = st.selectbox(
                 f"{i+1}. {df.at[i, 'TITLE'][:50]}...",
                 options=["Positive", "Neutral", "Negative"],
-                index=["Positive", "Neutral", "Negative"].index(current) if current in ["Positive","Neutral","Negative"] else 1,
+                index=["Positive","Neutral","Negative"].index(current) if current in ["Positive","Neutral","Negative"] else 1,
                 key=f"tonality_{i}"
             )
             updated_values[i] = new_val
@@ -89,23 +89,26 @@ if is_editor:
             st.success("Tonality updated!")
 
 st.subheader("Mentions List")
-# ---------- DISPLAY MENTIONS ----------
+
+# ---------- DISPLAY MENTIONS WITH NATIVE CONTAINERS ----------
 for i in df.index:
     row = df.loc[i]
     tonality = st.session_state["tonality_map"][i]
-    bg = COLORS.get(tonality, "#ffffff")
-    st.markdown(
-        f"""
-        <div style="background-color:{bg}; padding:15px; border-radius:8px; margin-bottom:10px;">
-            <b>{i+1}. {row['DATE']} {row['TIME']}</b><br>
-            <b>Source:</b> {row['SOURCE']}<br>
-            <b>Title:</b> {row['TITLE']}<br>
-            <b>Summary:</b> {row['SUMMARY']}<br>
-            <b>Tonality:</b> {tonality}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if row["LINK"].startswith("http"):
-        st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
+    bg_color = COLORS.get(tonality, "#ffffff")
+
+    with st.container():
+        st.markdown(
+            f"""
+            <div style="background-color:{bg_color}; padding:15px; border-radius:8px;">
+                <b>{i+1}. {row['DATE']} {row['TIME']}</b><br>
+                <b>Source:</b> {row['SOURCE']}<br>
+                <b>Title:</b> {row['TITLE']}<br>
+                <b>Summary:</b> {row['SUMMARY']}<br>
+                <b>Tonality:</b> {tonality}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        if row["LINK"].startswith("http"):
+            st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
     st.markdown("---")
