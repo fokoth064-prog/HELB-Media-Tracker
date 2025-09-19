@@ -8,9 +8,10 @@ import nltk
 import gspread
 from google.oauth2.service_account import Credentials
 import calendar
+import io
 from datetime import datetime
 
-# ensure NLTK stopwords are available
+# Ensure nltk stopwords are available
 nltk.download("stopwords", quiet=True)
 from nltk.corpus import stopwords as nltk_stopwords
 
@@ -27,11 +28,11 @@ LOGO_URL = "https://www.helb.co.ke/wp-content/uploads/2022/05/helb-logo.png"
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide", page_title="HELB MEDIA MONITORING DASHBOARD")
 
-# ---------------- HEADER STYLE + MARKUP (Pinned with green background) ----------------
+# ---------------- STYLES: Header, Hero, Sidebar, Tiles ----------------
 st.markdown(
     f"""
     <style>
-        /* Pinned header bar */
+        /* Pinned header with logo */
         .helb-header {{
             position: fixed;
             top: 0;
@@ -43,51 +44,70 @@ st.markdown(
             display:flex;
             align-items:center;
             gap:16px;
-            padding: 14px 22px;
+            padding: 10px 20px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-            border-radius: 0 0 12px 12px;
         }}
         .helb-header img {{
-            height:56px;
+            height:50px;
             width:auto;
             display:block;
         }}
-        .helb-header .title {{
-            color: white;
-            margin: 0;
-            font-size: 22px;
-            font-weight: 800;
-            letter-spacing: 0.6px;
+        .helb-header .subtitle {{
+            font-size:12px;
+            opacity:0.95;
+            margin-top:2px;
         }}
 
-        /* optional gold accent line under header */
+        /* Accent under header */
         .helb-accent {{
             height: 4px;
             width: 100%;
             background: linear-gradient(90deg, {HELB_GOLD}, rgba(255,215,0,0.4));
-            margin-top: 6px;
-            border-radius: 0 0 6px 6px;
         }}
 
-        /* spacing to push app content below sticky header */
+        /* Hero banner (the big title users see first) */
+        .hero-banner {{
+            margin-top: 86px; /* space for pinned header */
+            background: linear-gradient(90deg, {HELB_GREEN}, {HELB_GREEN_LIGHT});
+            color: white;
+            padding: 36px 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }}
+        .hero-banner h1 {{
+            margin: 0;
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }}
+        .hero-banner p {{
+            margin: 6px 0 0;
+            opacity: 0.95;
+        }}
+
+        /* Body spacing to ensure footer doesn't overlap */
         .app-body {{
-            padding-top: 130px;
+            padding-top: 20px;
+            padding-bottom: 90px; /* leave room for footer */
         }}
 
-        /* Sidebar branding */
+        /* Sidebar styling */
         section[data-testid="stSidebar"] {{
             background: linear-gradient(180deg, {HELB_GREEN}, {HELB_GREEN_LIGHT});
         }}
-        section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] span {{
+        section[data-testid="stSidebar"] .css-1d391kg, 
+        section[data-testid="stSidebar"] label, 
+        section[data-testid="stSidebar"] span {{
             color: white !important;
         }}
 
         /* Tiles and chart containers */
         .tile {{
             background-color: white;
-            padding: 18px;
+            padding: 16px;
             border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             text-align: center;
             margin-bottom: 10px;
         }}
@@ -103,132 +123,152 @@ st.markdown(
         }}
         .chart-tile {{
             background-color: white;
-            padding: 14px;
+            padding: 12px;
             border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
             margin-bottom: 18px;
         }}
-        .stMultiSelect [data-baseweb="select"] > div {{
-            background-color: {HELB_GREEN} !important;
-            color: white !important;
-            border-radius: 8px;
-        }}
-        .stMultiSelect span, .stMultiSelect div[aria-label="Main select"] span {{
-            color: white !important;
+
+        /* Footer */
+        .footer {{
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(90deg, {HELB_GREEN_LIGHT}, {HELB_GREEN});
+            color: white;
+            text-align: center;
+            padding: 8px 12px;
+            font-size: 0.95rem;
+            box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
         }}
     </style>
+    """,
+    unsafe_allow_html=True,
+)
 
+# ---------------- HEADER + HERO ----------------
+st.markdown(
+    f"""
     <div class="helb-header">
         <img src="{LOGO_URL}" alt="HELB Logo">
         <div>
-            <div class="title">HELB MEDIA MONITORING DASHBOARD</div>
-            <div style="font-size:12px; opacity:0.9">Media mentions, sentiment & trends</div>
+            <div style="font-weight:800;">HELB</div>
+            <div class="subtitle">Media Monitoring & Insights</div>
         </div>
     </div>
     <div class="helb-accent"></div>
+
+    <div class="hero-banner">
+        <h1>HELB MEDIA MONITORING DASHBOARD</h1>
+        <p>Live media mentions, sentiment and trends — powered by automated monitoring</p>
+    </div>
     """,
     unsafe_allow_html=True,
 )
 
-# wrapper to push content down (so header doesn't overlap)
+# wrapper to provide spacing below hero
 st.markdown('<div class="app-body">', unsafe_allow_html=True)
 
-# ---------------- BIG PAGE TITLE ----------------
-st.markdown(
-    f"""
-    <h1 style='text-align:center; color:{HELB_GREEN}; font-weight:900;'>
-        HELB MEDIA MONITORING DASHBOARD
-    </h1>
-    """,
-    unsafe_allow_html=True,
-)
-
-# ---------------- LOAD DATA ----------------
+# ---------------- DATA LOADER ----------------
 @st.cache_data(ttl=600)
-def load_data():
+def load_data_from_sheet(sheet_id: str):
+    # Attempt to authenticate via st.secrets first, otherwise fall back to local file
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = None
     try:
-        scope = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive",
-        ]
-
-        creds = Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"], scopes=scope
-        )
+        if "gcp_service_account" in st.secrets:
+            # st.secrets["gcp_service_account"] should be the parsed JSON (dict)
+            creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+        else:
+            # fallback to local file 'service_account.json' if exists
+            import os
+            if os.path.exists("service_account.json"):
+                creds = Credentials.from_service_account_file("service_account.json", scopes=scope)
+            else:
+                raise FileNotFoundError("No GCP service account available. Add st.secrets['gcp_service_account'] or service_account.json in app root.")
         client = gspread.authorize(creds)
-
-        SHEET_ID = "10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ"  # change if needed
-        sh = client.open_by_key(SHEET_ID)
+        sh = client.open_by_key(sheet_id)
         worksheet = sh.sheet1
         records = worksheet.get_all_records()
         df = pd.DataFrame(records)
     except Exception as e:
-        st.error(f"Failed to load Google Sheet: {e}")
+        st.error(f"Error loading Google Sheet: {e}")
         return pd.DataFrame()
-
-    # normalize columns and ensure required fields exist
-    df.columns = [c.strip().lower() for c in df.columns]
-    for c in ["title", "summary", "source", "tonality", "link", "published"]:
-        if c not in df.columns:
-            df[c] = ""
-
-    df["published"] = df["published"].astype(str).str.strip()
-    # parse datetimes robustly and convert to Nairobi timezone if possible
-    try:
-        df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce", utc=True).dt.tz_convert("Africa/Nairobi")
-    except Exception:
-        df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce")
-        try:
-            df["published_parsed"] = df["published_parsed"].dt.tz_localize("Africa/Nairobi", ambiguous="NaT", nonexistent="NaT")
-        except Exception:
-            pass
-
-    df["tonality_norm"] = df["tonality"].astype(str).str.strip().str.capitalize()
-
-    # Derived fields
-    df["YEAR"] = df["published_parsed"].dt.year
-    df["MONTH_NUM"] = df["published_parsed"].dt.month
-    df["MONTH"] = df["published_parsed"].dt.strftime("%b")
-    fy = []
-    for d in df["published_parsed"]:
-        if pd.isnull(d):
-            fy.append(None)
-        else:
-            if d.month >= 7:
-                fy.append(f"{d.year}/{d.year+1}")
-            else:
-                fy.append(f"{d.year-1}/{d.year}")
-    df["FINANCIAL_YEAR"] = fy
-
-    def fy_quarter(date):
-        if pd.isnull(date):
-            return None
-        m = date.month
-        if m in (7, 8, 9):
-            return "Q1 (Jul–Sep)"
-        if m in (10, 11, 12):
-            return "Q2 (Oct–Dec)"
-        if m in (1, 2, 3):
-            return "Q3 (Jan–Mar)"
-        return "Q4 (Apr–Jun)"
-
-    df["QUARTER"] = df["published_parsed"].apply(fy_quarter)
-
     return df
 
+# Replace with your sheet ID (the long ID from the sheet URL)
+SHEET_ID = "10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ"
 
-df = load_data()
-if df.empty:
-    st.error("❌ No data loaded. Please check Google Sheet & secrets setup.")
+df_raw = load_data_from_sheet(SHEET_ID)
+
+# ---------------- Data sanity / normalization ----------------
+if df_raw.empty:
+    st.error("No data loaded from the Google Sheet. Please check credentials and Sheet ID.")
     st.stop()
+
+# normalize column names to lowercase
+df_raw.columns = [c.strip().lower() for c in df_raw.columns]
+
+# ensure expected columns exist (create if missing)
+for col in ["title", "summary", "source", "tonality", "link", "published"]:
+    if col not in df_raw.columns:
+        df_raw[col] = ""
+
+# parse published into datetime (robust)
+df = df_raw.copy()
+df["published"] = df["published"].astype(str).str.strip()
+# try parse as utc then convert to Nairobi
+try:
+    df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce", utc=True).dt.tz_convert("Africa/Nairobi")
+except Exception:
+    df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce")
+    try:
+        # attempt localization if naive
+        df["published_parsed"] = df["published_parsed"].dt.tz_localize("Africa/Nairobi", ambiguous="NaT", nonexistent="NaT")
+    except Exception:
+        pass
+
+# tonality normalization
+df["tonality_norm"] = df["tonality"].astype(str).str.strip().str.capitalize()
+
+# derived fields
+df["YEAR"] = df["published_parsed"].dt.year
+df["MONTH_NUM"] = df["published_parsed"].dt.month
+df["MONTH"] = df["published_parsed"].dt.strftime("%b")
+# financial year
+fy_list = []
+for d in df["published_parsed"]:
+    if pd.isnull(d):
+        fy_list.append(None)
+    else:
+        if d.month >= 7:
+            fy_list.append(f"{d.year}/{d.year+1}")
+        else:
+            fy_list.append(f"{d.year-1}/{d.year}")
+df["FINANCIAL_YEAR"] = fy_list
+
+def fy_quarter(date):
+    if pd.isnull(date):
+        return None
+    m = date.month
+    if m in (7, 8, 9):
+        return "Q1 (Jul–Sep)"
+    if m in (10, 11, 12):
+        return "Q2 (Oct–Dec)"
+    if m in (1, 2, 3):
+        return "Q3 (Jan–Mar)"
+    return "Q4 (Apr–Jun)"
+
+df["QUARTER"] = df["published_parsed"].apply(fy_quarter)
 
 # ---------------- SIDEBAR SLICERS ----------------
 st.sidebar.header("🔎 Filters (Slicers)")
 
-years_all = sorted([int(y) for y in df["YEAR"].dropna().unique()])
-fys_all = sorted([fy for fy in df["FINANCIAL_YEAR"].dropna().unique()])
+years_all = sorted([int(y) for y in df["YEAR"].dropna().unique()]) if not df["YEAR"].dropna().empty else []
+fys_all = sorted([fy for fy in df["FINANCIAL_YEAR"].dropna().unique()]) if not df["FINANCIAL_YEAR"].dropna().empty else []
 quarters_all = ["Q1 (Jul–Sep)", "Q2 (Oct–Dec)", "Q3 (Jan–Mar)", "Q4 (Apr–Jun)"]
-months_all = list(calendar.month_abbr)[1:]  # Jan..Dec
+months_all = list(calendar.month_abbr)[1:]
 
 selected_years = st.sidebar.multiselect("Select Year(s)", years_all, default=[])
 selected_fys = st.sidebar.multiselect("Select Financial Year(s)", fys_all, default=[])
@@ -239,6 +279,7 @@ keyword = st.sidebar.text_input("Keyword search (title + summary)")
 show_debug = st.sidebar.checkbox("🛠 Show Debug Table")
 
 if st.sidebar.button("Clear All Filters"):
+    # reset local variables (widgets will keep state until page reload)
     selected_years = []
     selected_fys = []
     selected_quarters = []
@@ -247,6 +288,7 @@ if st.sidebar.button("Clear All Filters"):
 
 # ---------------- APPLY FILTERS ----------------
 filtered = df.copy()
+
 if selected_years:
     filtered = filtered[filtered["YEAR"].isin(selected_years)]
 if selected_fys:
@@ -293,7 +335,6 @@ with colA:
     ton_order = ["Positive", "Negative", "Neutral"]
     counts = filtered["tonality_norm"].value_counts().reindex(ton_order).fillna(0).astype(int)
     donut_df = pd.DataFrame({"Tonality": counts.index, "Count": counts.values})
-
     if donut_df["Count"].sum() > 0:
         fig_donut = px.pie(
             donut_df,
@@ -412,6 +453,15 @@ if st.button("☁️ Generate Word Cloud"):
         st.info("No text available to generate word cloud.")
 st.markdown("</div>", unsafe_allow_html=True)
 
+# ---------------- DOWNLOAD BUTTON ----------------
+st.markdown("---")
+st.subheader("Export / Download")
+if not filtered.empty:
+    csv_bytes = filtered.to_csv(index=False).encode("utf-8")
+    st.download_button("⬇️ Download filtered data (CSV)", data=csv_bytes, file_name="helb_mentions_filtered.csv", mime="text/csv")
+else:
+    st.info("No data to download for the current filters.")
+
 # ---------------- DEBUG / RAW TABLE ----------------
 if show_debug:
     st.markdown("---")
@@ -420,11 +470,15 @@ if show_debug:
     available = [c for c in disp_cols if c in df.columns]
     st.dataframe(df[available].head(200))
 
-# ---------------- FOOTER: last updated info ----------------
-try:
-    latest = df["published_parsed"].dropna().max()
-    if pd.notna(latest):
-        try:
-            latest_local = pd.to_datetime(latest).tz_convert("Africa/Nairobi").strftime("%Y-%m-%d %H:%M %Z")
-        except Exception:
-            latest_local = pd.to_datetime(latest).strftime("%Y-%m-%
+# ---------------- FOOTER ----------------
+st.markdown(
+    f"""
+    <div class="footer">
+        Developed by Fred Okoth
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# close wrapper
+st.markdown("</div>", unsafe_allow_html=True)
