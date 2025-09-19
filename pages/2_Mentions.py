@@ -1,107 +1,112 @@
-# mentions.py
+# pages/2_Mentions.py
 import streamlit as st
 import pandas as pd
 
 # ---------- CONFIG ----------
 CSV_URL = "https://docs.google.com/spreadsheets/d/10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ/export?format=csv"
-EDITOR_PASSWORD = "mysecret123"  # 👈 change this to your own secret
+
+# ---------- HARD-CODED PASSWORD ----------
+EDITOR_PASSWORD = "MyHardSecret123"  # change this string anytime
+password = st.sidebar.text_input("Enter edit password", type="password")
+is_editor = password == EDITOR_PASSWORD
+
+if is_editor:
+    st.sidebar.success("Editor mode ✅")
+else:
+    st.sidebar.info("Read-only mode 🔒")
 
 # ---------- LOAD DATA ----------
 @st.cache_data
 def load_data():
     df = pd.read_csv(CSV_URL)
-    df['published_parsed'] = pd.to_datetime(df['published'], errors='coerce')
+
+    # Normalize column names
+    df.columns = [c.strip().lower() for c in df.columns]
+
+    # Parse dates
+    if "published" in df.columns:
+        df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce", utc=True)
+        try:
+            df["published_parsed"] = df["published_parsed"].dt.tz_convert("Africa/Nairobi")
+        except Exception:
+            pass
+        df["DATE"] = df["published_parsed"].dt.strftime("%d-%b-%Y")
+        df["TIME"] = df["published_parsed"].dt.strftime("%H:%M")
+    else:
+        df["published_parsed"] = pd.NaT
+        df["DATE"] = ""
+        df["TIME"] = ""
+
+    # Ensure required columns exist
+    for col in ["title", "summary", "source", "tonality", "link"]:
+        if col not in df.columns:
+            df[col] = ""
+        df[col] = df[col].fillna("")
+
+    # Rename to uppercase
+    rename_map = {
+        "title": "TITLE",
+        "summary": "SUMMARY",
+        "source": "SOURCE",
+        "tonality": "TONALITY",
+        "link": "LINK",
+    }
+    df = df.rename(columns=rename_map)
     return df
 
-# Keep a session copy for edits
+# ---------- INITIALIZE SESSION STATE ----------
 if "mentions_df" not in st.session_state:
-    st.session_state.mentions_df = load_data()
+    st.session_state["mentions_df"] = load_data()
 
-df = st.session_state.mentions_df
+df = st.session_state["mentions_df"]
 
-st.title("💬 Mentions")
+if df.empty:
+    st.info("No data available. Check the CSV URL.")
+    st.stop()
 
-# ---------- ACCESS CONTROL ----------
-st.sidebar.subheader("Editor Access")
-editor_mode = False
-password_input = st.sidebar.text_input("Enter password for edit access:", type="password")
-if password_input == EDITOR_PASSWORD:
-    st.sidebar.success("Editor mode unlocked ✅")
-    editor_mode = True
-else:
-    st.sidebar.info("View-only mode (enter password to edit)")
+# Sort newest first
+df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
 
-# ---------- FILTERS ----------
-st.sidebar.header("Filters")
-sources = sorted(df['source'].dropna().unique())
-source_filter = st.sidebar.multiselect("Source", options=sources, default=sources)
+# ---------- COLOR MAP ----------
+COLORS = {
+    "Positive": "#b6e2b6",  # darker green
+    "Neutral": "#f3f3f3",   # light grey
+    "Negative": "#f7b6b6"   # darker red
+}
 
-tonalities = ["Positive", "Negative", "Neutral"]
-tonality_filter = st.sidebar.multiselect("Tonality", options=tonalities, default=tonalities)
+# ---------- DISPLAY MENTIONS ----------
+st.title("📰 Mentions — Media Coverage")
 
-filtered = df[
-    df['source'].isin(source_filter) &
-    df['tonality'].isin(tonality_filter)
-]
-
-# ---------- DISPLAY ----------
-if not filtered.empty:
-    st.write("### Mentions View")
-
-    # Sort latest first
-    filtered = filtered.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
-
-    for i, row in filtered.iterrows():
-        # ✅ Use *updated* tonality from df
-        tonality = row['tonality']
-
-        if tonality == "Positive":
-            color = "#228B22"
-        elif tonality == "Negative":
-            color = "#B22222"
-        else:
-            color = "#696969"
-        text_color = "white"
-
+for i, row in df.iterrows():
+    with st.container():
+        bg_color = COLORS.get(row["TONALITY"], "#ffffff")
         st.markdown(
             f"""
-            <div style="background-color:{color}; color:{text_color}; 
-                        padding:15px; border-radius:10px; margin-bottom:10px">
-                <b>{i+1}. {row['title']}</b><br>
-                <i>Date: {row['published_parsed'].strftime("%d %B %Y")} | Source: {row['source']}</i><br><br>
-                {row['summary']}<br><br>
-                <b>Tonality:</b> {tonality}
+            <div style="background-color:{bg_color}; padding:15px; border-radius:8px; margin-bottom:10px;">
+                <b>{i+1}. {row['DATE']} {row['TIME']}</b><br>
+                <b>Source:</b> {row['SOURCE']}<br>
+                <b>Title:</b> {row['TITLE']}<br>
+                <b>Summary:</b> {row['SUMMARY']}<br>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
-        # ✅ Only show dropdown if editor_mode is ON
-        if editor_mode:
+        # Editable tonality only for editor
+        if is_editor:
             new_tonality = st.selectbox(
-                f"Update Tonality for mention {i+1}",
-                tonalities,
-                index=tonalities.index(tonality),
-                key=f"tonality_{row.name}"
+                f"Update Tonality for mention #{i+1}",
+                options=["Positive", "Neutral", "Negative"],
+                index=["Positive","Neutral","Negative"].index(row["TONALITY"]) if row["TONALITY"] in ["Positive","Neutral","Negative"] else 1,
+                key=f"tonality_{i}"
             )
-            if new_tonality != tonality:
-                st.session_state.mentions_df.loc[row.name, 'tonality'] = new_tonality
-                st.experimental_rerun()  # refresh immediately so colors update
+            if new_tonality != row["TONALITY"]:
+                st.session_state["mentions_df"].at[i, "TONALITY"] = new_tonality
+        else:
+            st.markdown(f"**Tonality:** {row['TONALITY']}")
 
-        # Add link if available
-        if 'link' in row and pd.notna(row['link']):
-            st.markdown(f"[🔗 Read full story]({row['link']})", unsafe_allow_html=True)
+        # Read full story link
+        if row["LINK"].startswith("http"):
+            st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
 
         st.markdown("---")
-
-    # ✅ Allow download of corrected dataset only in editor mode
-    if editor_mode:
-        st.download_button(
-            "💾 Download Corrected Mentions CSV",
-            data=st.session_state.mentions_df.to_csv(index=False).encode("utf-8"),
-            file_name="mentions_corrected.csv",
-            mime="text/csv"
-        )
-else:
-    st.warning("No mentions available for selected filters.")
-
