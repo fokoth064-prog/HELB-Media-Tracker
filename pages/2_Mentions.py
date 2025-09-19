@@ -31,12 +31,32 @@ filtered = df[
 
 # ---------- DISPLAY ----------
 if not filtered.empty:
-    st.write("### Mentions")
-    st.dataframe(
-        filtered[['published', 'source', 'title', 'summary', 'tonality']],
-        use_container_width=True,  # ✅ auto-fit to screen
-        hide_index=True
-    )
+    st.write("### Mentions View")
+
+    for _, row in filtered.iterrows():
+        # background colors by tonality
+        if row['tonality'] == "Positive":
+            color = "#228B22"  # darker green
+            text_color = "white"
+        elif row['tonality'] == "Negative":
+            color = "#B22222"  # darker red
+            text_color = "white"
+        else:
+            color = "#696969"  # neutral gray
+            text_color = "white"
+
+        st.markdown(
+            f"""
+            <div style="background-color:{color}; color:{text_color}; 
+                        padding:15px; border-radius:10px; margin-bottom:10px">
+                <b>{row['title']}</b><br>
+                <i>{row['published_parsed'].date()} | {row['source']}</i><br><br>
+                {row['summary']}<br><br>
+                <b>Tonality:</b> {row['tonality']}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 else:
     st.warning("No mentions available for selected filters.")
 
