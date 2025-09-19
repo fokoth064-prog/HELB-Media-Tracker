@@ -67,11 +67,11 @@ if df.empty:
 # Sort newest first
 df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
 
-# ---------- COLOR MAP ----------
+# ---------- COLOR MAP (restored to previous) ----------
 COLORS = {
-    "Positive": "#b6e2b6",  # darker green
+    "Positive": "#dff7df",  # light green
     "Neutral": "#f3f3f3",   # light grey
-    "Negative": "#f7b6b6"   # darker red
+    "Negative": "#ffd6d6"   # light red
 }
 
 # ---------- DISPLAY MENTIONS ----------
