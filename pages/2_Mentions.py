@@ -1,4 +1,3 @@
-# pages/2_Mentions.py
 import streamlit as st
 import pandas as pd
 
@@ -56,10 +55,11 @@ if df.empty:
 
 df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
 
-# Tonality mapping
+# Tonality mapping for immediate updates
 if "tonality_map" not in st.session_state:
     st.session_state["tonality_map"] = {i: df.at[i, "TONALITY"] for i in df.index}
 
+# ---------- COLOR MAP ----------
 COLORS = {
     "Positive": "#3b8132",
     "Neutral": "#6E6F71",
@@ -80,6 +80,7 @@ if is_editor:
             index=["Positive","Neutral","Negative"].index(current) if current in ["Positive","Neutral","Negative"] else 1,
             key=f"tonality_{i}"
         )
+        # Update tonality_map immediately
         if new_val != current:
             st.session_state["tonality_map"][i] = new_val
 
