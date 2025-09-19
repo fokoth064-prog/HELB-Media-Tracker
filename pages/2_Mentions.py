@@ -55,7 +55,7 @@ if df.empty:
 
 df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
 
-# Tonality mapping for live updates
+# Tonality mapping
 if "tonality_map" not in st.session_state:
     st.session_state["tonality_map"] = {i: df.at[i, "TONALITY"] for i in df.index}
 
@@ -68,29 +68,29 @@ COLORS = {
 
 st.title("📰 Mentions — Media Coverage")
 
-# ---------- EDITOR FORM ----------
+# ---------- EDITOR INTERFACE ----------
 if is_editor:
     st.subheader("Edit Tonality")
-    with st.form("edit_tonality_form"):
-        updated_values = {}
-        for i in df.index:
-            current = st.session_state["tonality_map"][i]
-            new_val = st.selectbox(
-                f"{i+1}. {df.at[i, 'TITLE'][:50]}...",
-                options=["Positive", "Neutral", "Negative"],
-                index=["Positive","Neutral","Negative"].index(current) if current in ["Positive","Neutral","Negative"] else 1,
-                key=f"tonality_{i}"
-            )
-            updated_values[i] = new_val
-        submitted = st.form_submit_button("Update Tonality")
-        if submitted:
-            for idx, val in updated_values.items():
-                st.session_state["tonality_map"][idx] = val
-            st.success("Tonality updated!")
+    edited_values = {}
+
+    for i in df.index:
+        current = st.session_state["tonality_map"][i]
+        new_val = st.selectbox(
+            f"{i+1}. {df.at[i, 'TITLE'][:50]}...",
+            options=["Positive", "Neutral", "Negative"],
+            index=["Positive","Neutral","Negative"].index(current) if current in ["Positive","Neutral","Negative"] else 1,
+            key=f"tonality_{i}"
+        )
+        edited_values[i] = new_val
+
+    if st.button("Submit Changes"):
+        for idx, val in edited_values.items():
+            st.session_state["tonality_map"][idx] = val
+        st.success("Tonality updated! Display refreshed.")
 
 st.subheader("Mentions List")
 
-# ---------- DISPLAY MENTIONS WITH NATIVE CONTAINERS ----------
+# ---------- DISPLAY MENTIONS ----------
 for i in df.index:
     row = df.loc[i]
     tonality = st.session_state["tonality_map"][i]
@@ -112,3 +112,4 @@ for i in df.index:
         if row["LINK"].startswith("http"):
             st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
     st.markdown("---")
+
