@@ -2,6 +2,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud, STOPWORDS
+import nltk
+from io import BytesIO
+
+# Download stopwords if not already
+nltk.download("stopwords", quiet=True)
+from nltk.corpus import stopwords as nltk_stopwords
 
 # ---------------- CONFIG ----------------
 CSV_URL = "https://docs.google.com/spreadsheets/d/10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ/export?format=csv"
@@ -34,7 +42,7 @@ def load_data(csv_url):
         else:
             if date.month >= 7:  # July–Dec → FY start = current year
                 fy.append(f"{date.year}/{date.year+1}")
-            else:               # Jan–Jun → FY start = prev year
+            else:  # Jan–Jun → FY start = prev year
                 fy.append(f"{date.year-1}/{date.year}")
     df["FINANCIAL_YEAR"] = fy
 
@@ -55,6 +63,7 @@ def load_data(csv_url):
     df["QUARTER"] = df["published_parsed"].apply(fy_quarter)
 
     return df
+
 
 df = load_data(CSV_URL)
 
@@ -83,6 +92,7 @@ st.markdown(
             font-weight: bold;
             margin: 5px 0 0;
         }}
+        /* Style for Streamlit multiselect (slicers) */
         .stMultiSelect [data-baseweb="select"] > div {{
             background-color: {HELB_GREEN} !important;
             color: white !important;
@@ -91,9 +101,12 @@ st.markdown(
         .stMultiSelect span {{
             color: white !important;
         }}
+        .stMultiSelect div[aria-label="Main select"] span {{
+            color: white !important; /* placeholder 'Select options' */
+        }}
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 st.title("📊 HELB Dashboard")
@@ -114,22 +127,16 @@ selected_quarters = st.sidebar.multiselect("Select Quarter(s)", quarters_all, de
 
 # Apply filters
 filtered = df.copy()
-
 if selected_years:
     filtered = filtered[filtered["YEAR"].isin(selected_years)]
-
 if selected_fys:
     filtered = filtered[filtered["FINANCIAL_YEAR"].isin(selected_fys)]
-
-# Sync quarters with available data after year/FY filters
-quarters_available = sorted(filtered["QUARTER"].dropna().unique())
 if selected_quarters:
     filtered = filtered[filtered["QUARTER"].isin(selected_quarters)]
 
 # Reset option
 if st.sidebar.button("Clear All Filters"):
     filtered = df.copy()
-    selected_years, selected_fys, selected_quarters = [], [], []
 
 # ---------------- KPI TILES ----------------
 col1, col2, col3, col4 = st.columns(4)
@@ -140,13 +147,25 @@ negative = filtered[filtered["tonality"] == "Negative"]
 neutral = filtered[filtered["tonality"] == "Neutral"]
 
 with col1:
-    st.markdown(f"<div class='tile'><h3>Total Mentions</h3><p style='color:{HELB_BLUE};'>{total_mentions}</p></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='tile'><h3>Total Mentions</h3><p style='color:{HELB_BLUE};'>{total_mentions}</p></div>",
+        unsafe_allow_html=True,
+    )
 with col2:
-    st.markdown(f"<div class='tile'><h3>Positive</h3><p style='color:{HELB_GREEN};'>{len(positive)}</p></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='tile'><h3>Positive</h3><p style='color:{HELB_GREEN};'>{len(positive)}</p></div>",
+        unsafe_allow_html=True,
+    )
 with col3:
-    st.markdown(f"<div class='tile'><h3>Negative</h3><p style='color:{HELB_RED};'>{len(negative)}</p></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='tile'><h3>Negative</h3><p style='color:{HELB_RED};'>{len(negative)}</p></div>",
+        unsafe_allow_html=True,
+    )
 with col4:
-    st.markdown(f"<div class='tile'><h3>Neutral</h3><p style='color:{HELB_GOLD};'>{len(neutral)}</p></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='tile'><h3>Neutral</h3><p style='color:{HELB_GOLD};'>{len(neutral)}</p></div>",
+        unsafe_allow_html=True,
+    )
 
 st.markdown("---")
 
@@ -166,8 +185,8 @@ with col5:
             color_discrete_map={
                 "Positive": HELB_GREEN,
                 "Negative": HELB_RED,
-                "Neutral": HELB_GOLD
-            }
+                "Neutral": HELB_GOLD,
+            },
         )
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
@@ -175,10 +194,41 @@ with col5:
 
 with col6:
     st.subheader("Mentions Over Time")
-    timeline = filtered.groupby(filtered["published_parsed"].dt.date).size().reset_index(name="Count")
+    timeline = (
+        filtered.groupby(filtered["published_parsed"].dt.date)
+        .size()
+        .reset_index(name="Count")
+    )
     if not timeline.empty:
         fig_line = px.line(timeline, x="published_parsed", y="Count", markers=True)
         fig_line.update_traces(line_color=HELB_BLUE)
         st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("No data for selected filters.")
+
+st.markdown("---")
+
+# ---------------- WORD CLOUD ----------------
+st.subheader("☁️ Keyword Word Cloud")
+
+if not filtered.empty:
+    # Combine TITLE + SUMMARY for word cloud
+    texts = (filtered["title"].astype(str) + " " + filtered["summary"].astype(str)).tolist()
+    big_text = " ".join(texts)
+
+    stop_words = set(nltk_stopwords.words("english")) | set(STOPWORDS)
+
+    wc = WordCloud(
+        width=800,
+        height=400,
+        background_color="white",
+        colormap="Dark2",
+        stopwords=stop_words,
+    ).generate(big_text)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.imshow(wc, interpolation="bilinear")
+    ax.axis("off")
+    st.pyplot(fig)
+else:
+    st.info("No text available to generate word cloud for current filters.")
