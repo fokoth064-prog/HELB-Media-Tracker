@@ -7,7 +7,6 @@ from wordcloud import WordCloud, STOPWORDS
 import nltk
 import gspread
 from google.oauth2.service_account import Credentials
-import calendar
 
 # Ensure nltk stopwords are available
 nltk.download("stopwords", quiet=True)
@@ -48,21 +47,14 @@ def load_data():
         if c not in df.columns:
             df[c] = ""
 
-    # --- ensure dates parse properly
-    df["published"] = df["published"].astype(str).str.strip()
-    df["published_parsed"] = pd.to_datetime(
-        df["published"],
-        errors="coerce",
-        dayfirst=True,   # handles formats like 19/09/2025
-        utc=True
-    )
-
+    # --- parse dates robustly
+    df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce", dayfirst=False, infer_datetime_format=True)
     df["tonality_norm"] = df["tonality"].astype(str).str.strip().str.capitalize()
 
     # --- extra fields
     df["YEAR"] = df["published_parsed"].dt.year
     df["MONTH_NUM"] = df["published_parsed"].dt.month
-    df["MONTH"] = df["published_parsed"].dt.strftime("%b")  # "Jan", "Feb", "Sep"
+    df["MONTH"] = df["published_parsed"].dt.strftime("%b")
 
     fy = []
     for d in df["published_parsed"]:
@@ -94,10 +86,31 @@ if df.empty:
     st.stop()
 
 # ---------------- STYLE ----------------
-st.set_page_config(layout="wide", page_title="HELB Dashboard")
+st.set_page_config(layout="wide", page_title="HELB Media Monitoring Dashboard")
 st.markdown(
     f"""
     <style>
+        /* Sticky header */
+        .custom-header {{
+            position: -webkit-sticky;
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            background-color:{HELB_GREEN};
+            padding: 18px;
+            border-radius: 0 0 12px 12px;
+            display:flex;
+            align-items:center;
+            gap:14px;
+        }}
+        .custom-header h1 {{
+            color:white;
+            margin:0;
+            font-size:28px;
+        }}
+        .custom-header img {{
+            height:60px;
+        }}
         .tile {{
             background-color: white;
             padding: 18px;
@@ -132,11 +145,15 @@ st.markdown(
             color: white !important;
         }}
     </style>
+
+    <div class="custom-header">
+        <img src="https://www.helb.co.ke/wp-content/uploads/2022/05/helb-logo.png" alt="HELB Logo">
+        <h1>HELB MEDIA MONITORING DASHBOARD</h1>
+    </div>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("📊 HELB Mentions Monitor")
 st.write("Overview — use the slicers to filter by Year, Financial Year, Quarter or Month.")
 
 # ---------------- SIDEBAR SLICERS ----------------
@@ -145,7 +162,7 @@ st.sidebar.header("🔎 Filters (Slicers)")
 years_all = sorted([int(y) for y in df["YEAR"].dropna().unique()])
 fys_all = sorted([fy for fy in df["FINANCIAL_YEAR"].dropna().unique()])
 quarters_all = ["Q1 (Jul–Sep)", "Q2 (Oct–Dec)", "Q3 (Jan–Mar)", "Q4 (Apr–Jun)"]
-months_all = list(calendar.month_abbr)[1:]  # ["Jan", "Feb", ..., "Dec"]
+months_all = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 selected_years = st.sidebar.multiselect("Select Year(s)", years_all, default=[])
 selected_fys = st.sidebar.multiselect("Select Financial Year(s)", fys_all, default=[])
@@ -312,8 +329,3 @@ if st.button("☁️ View Word Cloud"):
     else:
         st.info("No text available to generate word cloud.")
 st.markdown("</div>", unsafe_allow_html=True)
-
-# ---------------- DEBUGGING ----------------
-if st.sidebar.checkbox("🛠 Show Debug Table"):
-    st.subheader("Debugging Table")
-    st.dataframe(df[["published", "published_parsed", "MONTH", "YEAR"]].head(50))
