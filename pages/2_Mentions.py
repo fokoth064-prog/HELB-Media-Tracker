@@ -58,7 +58,12 @@ if df.empty:
     st.info("No data available. Check the CSV URL.")
     st.stop()
 
+# Sort newest first
 df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
+
+# Store tonality separately for instant updates
+if "tonality_map" not in st.session_state:
+    st.session_state["tonality_map"] = dict(zip(df.index, df["TONALITY"]))
 
 # ---------- COLOR MAP ----------
 COLORS = {
@@ -73,21 +78,20 @@ st.title("📰 Mentions — Media Coverage")
 for i in df.index:
     row = df.loc[i]
 
-    # Editor mode with form
+    # Editor mode: update tonality first
     if is_editor:
-        with st.form(key=f"form_{i}"):
-            current_tonality = st.session_state["mentions_df"].at[i, "TONALITY"]
-            new_tonality = st.selectbox(
-                f"Update Tonality for mention #{i+1}",
-                options=["Positive", "Neutral", "Negative"],
-                index=["Positive","Neutral","Negative"].index(current_tonality) if current_tonality in ["Positive","Neutral","Negative"] else 1
-            )
-            submitted = st.form_submit_button("Update")
-            if submitted and new_tonality != current_tonality:
-                st.session_state["mentions_df"].at[i, "TONALITY"] = new_tonality
+        current_tonality = st.session_state["tonality_map"][i]
+        new_tonality = st.selectbox(
+            f"Update Tonality for mention #{i+1}",
+            options=["Positive", "Neutral", "Negative"],
+            index=["Positive","Neutral","Negative"].index(current_tonality) if current_tonality in ["Positive","Neutral","Negative"] else 1,
+            key=f"tonality_{i}"
+        )
+        if new_tonality != current_tonality:
+            st.session_state["tonality_map"][i] = new_tonality
 
-    # Always read the current tonality from session_state
-    display_tonality = st.session_state["mentions_df"].at[i, "TONALITY"]
+    # Display div using updated tonality
+    display_tonality = st.session_state["tonality_map"][i]
     bg_color = COLORS.get(display_tonality, "#ffffff")
 
     st.markdown(
@@ -103,6 +107,7 @@ for i in df.index:
         unsafe_allow_html=True,
     )
 
+    # Read full story link
     if row["LINK"].startswith("http"):
         st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
 
