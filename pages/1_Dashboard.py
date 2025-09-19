@@ -5,7 +5,6 @@ import plotly.express as px
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud, STOPWORDS
 import nltk
-from io import BytesIO
 
 # Ensure nltk stopwords are available
 nltk.download("stopwords", quiet=True)
@@ -31,26 +30,19 @@ def load_data(csv_url):
         st.error(f"Failed to load CSV: {e}")
         return pd.DataFrame()
 
-    # Normalize column names to lowercase and strip
     df.columns = [c.strip().lower() for c in df.columns]
 
-    # Ensure key text columns exist
     for c in ["title", "summary", "source", "tonality", "link", "published"]:
         if c not in df.columns:
             df[c] = ""
 
-    # Parse published into datetime safely
     df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce")
-
-    # Make a normalized tonality column to avoid casing issues
     df["tonality_norm"] = df["tonality"].astype(str).str.strip().str.capitalize()
 
-    # Calendar year, month, month num
     df["YEAR"] = df["published_parsed"].dt.year
     df["MONTH_NUM"] = df["published_parsed"].dt.month
-    df["MONTH"] = df["published_parsed"].dt.strftime("%b")  # Jan, Feb...
+    df["MONTH"] = df["published_parsed"].dt.strftime("%b")
 
-    # Financial Year (July–June)
     fy = []
     for d in df["published_parsed"]:
         if pd.isnull(d):
@@ -62,7 +54,6 @@ def load_data(csv_url):
                 fy.append(f"{d.year-1}/{d.year}")
     df["FINANCIAL_YEAR"] = fy
 
-    # Financial Quarter mapping
     def fy_quarter(date):
         if pd.isnull(date):
             return None
@@ -76,7 +67,6 @@ def load_data(csv_url):
         return "Q4 (Apr–Jun)"
 
     df["QUARTER"] = df["published_parsed"].apply(fy_quarter)
-
     return df
 
 
@@ -116,7 +106,6 @@ st.markdown(
             box-shadow: 0 2px 12px rgba(0,0,0,0.08);
             margin-bottom: 18px;
         }}
-        /* Attempt to style Streamlit multiselect placeholder / text */
         .stMultiSelect [data-baseweb="select"] > div {{
             background-color: {HELB_GREEN} !important;
             color: white !important;
@@ -146,7 +135,6 @@ selected_fys = st.sidebar.multiselect("Select Financial Year(s)", fys_all, defau
 selected_quarters = st.sidebar.multiselect("Select Quarter(s)", quarters_all, default=[])
 selected_months = st.sidebar.multiselect("Select Month(s)", months_all, default=[])
 
-# Apply filters
 filtered = df.copy()
 if selected_years:
     filtered = filtered[filtered["YEAR"].isin(selected_years)]
@@ -158,7 +146,6 @@ if selected_months:
     filtered = filtered[filtered["MONTH"].isin(selected_months)]
 
 if st.sidebar.button("Clear All Filters"):
-    # Reset filters visually only resets filtered content (note: widgets remain until page refresh)
     filtered = df.copy()
 
 # ---------------- KPI TILES ----------------
@@ -181,14 +168,12 @@ with col4:
 st.markdown("---")
 
 # ---------------- CHARTS (2x2 grid) ----------------
-# Top row
 colA, colB = st.columns(2)
 
 # --- Chart A: Tonality Doughnut
 with colA:
     st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
     st.subheader("Tonality Distribution")
-    # Build counts with consistent order
     ton_order = ["Positive", "Negative", "Neutral"]
     counts = filtered["tonality_norm"].value_counts().reindex(ton_order).fillna(0).astype(int)
     donut_df = pd.DataFrame({"Tonality": counts.index, "Count": counts.values})
@@ -202,15 +187,14 @@ with colA:
             color="Tonality",
             color_discrete_map={"Positive": HELB_GREEN, "Negative": HELB_RED, "Neutral": HELB_GREY},
         )
-        # ensure text inside slices is white for readability
         fig_donut.update_traces(textposition="inside", textinfo="percent+label", insidetextfont=dict(color="white"))
-        fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+        fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=300)
         st.plotly_chart(fig_donut, use_container_width=True)
     else:
         st.info("No tonality data for selected filters.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Chart B: Mentions Over Time (line)
+# --- Chart B: Mentions Over Time
 with colB:
     st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
     st.subheader("Mentions Over Time")
@@ -221,16 +205,15 @@ with colB:
         timeline["date"] = pd.to_datetime(timeline["date_only"])
         fig_line = px.line(timeline.sort_values("date"), x="date", y="count", markers=True)
         fig_line.update_traces(line_color=HELB_BLUE)
-        fig_line.update_layout(margin=dict(t=10, b=20, l=20, r=10))
+        fig_line.update_layout(margin=dict(t=10, b=20, l=20, r=10), height=300)
         st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("No date information available for selected filters.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Bottom row
 colC, colD = st.columns(2)
 
-# --- Chart C: Top Sources (horizontal bar)
+# --- Chart C: Top Sources
 with colC:
     st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
     st.subheader("Top News Sources")
@@ -245,13 +228,13 @@ with colC:
             text="Count",
         )
         fig_bar.update_traces(marker_color=HELB_GREEN)
-        fig_bar.update_layout(margin=dict(t=6, b=6, l=6, r=6), yaxis=dict(dtick=1))
+        fig_bar.update_layout(margin=dict(t=6, b=6, l=6, r=6), yaxis=dict(dtick=1), height=300)
         st.plotly_chart(fig_bar, use_container_width=True)
     else:
         st.info("No source data for selected filters.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Chart D: Tonality Trend Over Time (stacked area by month)
+# --- Chart D: Tonality Trend
 with colD:
     st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
     st.subheader("Tonality Trend Over Time (Monthly)")
@@ -263,7 +246,6 @@ with colD:
             .reset_index(name="count")
         )
         if not trend.empty:
-            # Sort months chronologically
             trend["month_dt"] = pd.to_datetime(trend["month"].astype(str) + "-01", errors="coerce")
             trend = trend.sort_values("month_dt")
             fig_area = px.area(
@@ -273,7 +255,7 @@ with colD:
                 color="tonality_norm",
                 color_discrete_map={"Positive": HELB_GREEN, "Negative": HELB_RED, "Neutral": HELB_GREY},
             )
-            fig_area.update_layout(margin=dict(t=6, b=6, l=6, r=6), legend_title_text="Tonality")
+            fig_area.update_layout(margin=dict(t=6, b=6, l=6, r=6), legend_title_text="Tonality", height=300)
             st.plotly_chart(fig_area, use_container_width=True)
         else:
             st.info("No tonality trend data for selected filters.")
@@ -283,20 +265,17 @@ with colD:
 
 st.markdown("---")
 
-# ---------------- WORD CLOUD (toggle) ----------------
+# ---------------- WORD CLOUD ----------------
 st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
 if st.button("☁️ View Word Cloud"):
     st.subheader("Keyword Word Cloud")
-    # handle both lowercase or uppercase column names
     title_col = "title" if "title" in filtered.columns else "TITLE"
     summary_col = "summary" if "summary" in filtered.columns else "SUMMARY"
-
     texts = (filtered[title_col].astype(str) + " " + filtered[summary_col].astype(str)).tolist()
     big_text = " ".join(texts).strip()
-
     if big_text:
         stop_words = set(nltk_stopwords.words("english")) | set(STOPWORDS)
-        # custom color function picking HELB palette
+
         def color_func(word, font_size, position, orientation, random_state=None, **kwargs):
             idx = abs(hash(word)) % len(HELB_COLORS)
             return HELB_COLORS[idx]
