@@ -1,4 +1,3 @@
-# pages/1_Dashboard.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -7,7 +6,6 @@ from wordcloud import WordCloud, STOPWORDS
 import nltk
 import gspread
 from google.oauth2.service_account import Credentials
-import calendar
 
 # Ensure nltk stopwords are available
 nltk.download("stopwords", quiet=True)
@@ -15,117 +13,49 @@ from nltk.corpus import stopwords as nltk_stopwords
 
 # ---------------- CONFIG ----------------
 HELB_GREEN = "#008000"
-HELB_GREEN_LIGHT = "#00A000"
 HELB_GOLD = "#FFD700"
 HELB_BLUE = "#1E90FF"
 HELB_RED = "#B22222"
 HELB_GREY = "#808080"
 HELB_COLORS = [HELB_GREEN, HELB_GOLD, HELB_BLUE, HELB_RED]
-LOGO_URL = "https://www.helb.co.ke/wp-content/uploads/2022/05/helb-logo.png"
 
-# ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide", page_title="HELB Media Monitoring Dashboard")
 
-# ---------------- STYLES: header + sidebar + tiles ----------------
-st.markdown(
-    f"""
+# ---------------- HEADER (Pinned with Logo) ----------------
+st.markdown("""
     <style>
-        /* Sticky header with gradient + subtle stripe overlay */
-        .custom-header {{
-            position: -webkit-sticky;
-            position: sticky;
-            top: 0;
-            z-index: 999;
-            background: linear-gradient(135deg, {HELB_GREEN}, {HELB_GREEN_LIGHT});
-            background-image: repeating-linear-gradient(
-                45deg,
-                rgba(255, 255, 255, 0.04),
-                rgba(255, 255, 255, 0.04) 10px,
-                transparent 10px,
-                transparent 20px
-            );
-            padding: 16px 22px;
-            border-radius: 0 0 12px 12px;
-            display:flex;
-            align-items:center;
-            gap:16px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-        }}
-        .custom-header img {{
-            height:56px;
-            width:auto;
-        }}
-        .custom-header h1 {{
-            color:white;
-            margin:0;
-            font-size:24px;
-            font-weight:700;
-            letter-spacing:0.6px;
-        }}
-
-        /* Give page content breathing room below sticky header */
-        .app-content {{
-            padding-top: 96px;
-        }}
-
-        /* Sidebar styling */
-        section[data-testid="stSidebar"] {{
-            background: linear-gradient(180deg, {HELB_GREEN}, {HELB_GREEN_LIGHT});
-        }}
-        section[data-testid="stSidebar"] .css-1d391kg, 
-        section[data-testid="stSidebar"] .css-1d391kg p,
-        section[data-testid="stSidebar"] label,
-        section[data-testid="stSidebar"] span {{
-            color: white !important;
-        }}
-
-        /* Tiles and chart containers */
-        .tile {{
-            background-color: white;
-            padding: 18px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            text-align: center;
-            margin-bottom: 10px;
-        }}
-        .tile h3 {{
-            margin: 0;
-            font-size: 14px;
-            color: {HELB_GREEN};
-        }}
-        .tile p {{
-            font-size: 26px;
-            font-weight: 600;
-            margin: 6px 0 0;
-        }}
-        .chart-tile {{
-            background-color: white;
-            padding: 14px;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-            margin-bottom: 18px;
-        }}
-        /* Multi-select appearance tweaks */
-        .stMultiSelect [data-baseweb="select"] > div {{
-            background-color: {HELB_GREEN} !important;
-            color: white !important;
-            border-radius: 8px;
-        }}
-        .stMultiSelect span, .stMultiSelect div[aria-label="Main select"] span {{
-            color: white !important;
-        }}
+    .header-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        background: linear-gradient(90deg, #006400, #228B22);
+        color: white;
+        padding: 15px 20px;
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
+    }
+    .header-container img {
+        height: 50px;
+        margin-right: 20px;
+    }
+    .header-title {
+        font-size: 24px;
+        font-weight: bold;
+        color: white;
+    }
+    .main > div {
+        padding-top: 100px; /* pushes dashboard down so it’s not hidden */
+    }
     </style>
-
-    <div class="custom-header">
-        <img src="{LOGO_URL}" alt="HELB Logo">
-        <h1>HELB MEDIA MONITORING DASHBOARD</h1>
+    <div class="header-container">
+        <img src="https://www.helb.co.ke/wp-content/uploads/2020/09/cropped-helb-logo.png" alt="HELB Logo">
+        <div class="header-title">HELB MEDIA MONITORING DASHBOARD</div>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# Wrap rest of page
-st.markdown('<div class="app-content">', unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # ---------------- LOAD DATA ----------------
 @st.cache_data(ttl=600)
@@ -134,13 +64,12 @@ def load_data():
         scope = ["https://www.googleapis.com/auth/spreadsheets",
                  "https://www.googleapis.com/auth/drive"]
 
-        # Use service account stored in Streamlit secrets
         creds = Credentials.from_service_account_info(
             st.secrets["gcp_service_account"], scopes=scope
         )
         client = gspread.authorize(creds)
 
-        SHEET_ID = "10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ"  # replace if needed
+        SHEET_ID = "10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ"
         sh = client.open_by_key(SHEET_ID)
         worksheet = sh.sheet1
         records = worksheet.get_all_records()
@@ -149,28 +78,20 @@ def load_data():
         st.error(f"Failed to load Google Sheet: {e}")
         return pd.DataFrame()
 
-    # Normalize column names & ensure required columns exist
+    # --- clean columns
     df.columns = [c.strip().lower() for c in df.columns]
     for c in ["title", "summary", "source", "tonality", "link", "published"]:
         if c not in df.columns:
             df[c] = ""
 
-    # Ensure 'published' is a string, then parse timestamps robustly
-    df["published"] = df["published"].astype(str).str.strip()
-    # Try parse with utc then convert to Nairobi timezone for consistent month/year values
-    try:
-        df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce", utc=True).dt.tz_convert("Africa/Nairobi")
-    except Exception:
-        # fallback: parse without tz, then localize to Nairobi
-        df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce")
-        df["published_parsed"] = pd.to_datetime(df["published_parsed"], errors="coerce").dt.tz_localize("Africa/Nairobi", ambiguous="NaT", nonexistent="NaT")
-
+    df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce")
     df["tonality_norm"] = df["tonality"].astype(str).str.strip().str.capitalize()
 
-    # Derived fields
+    # --- extra fields
     df["YEAR"] = df["published_parsed"].dt.year
     df["MONTH_NUM"] = df["published_parsed"].dt.month
-    df["MONTH"] = df["published_parsed"].dt.strftime("%b")  # Jan, Feb, Mar...
+    df["MONTH"] = df["published_parsed"].dt.strftime("%b")
+
     fy = []
     for d in df["published_parsed"]:
         if pd.isnull(d):
@@ -186,23 +107,62 @@ def load_data():
         if pd.isnull(date):
             return None
         m = date.month
-        if m in (7, 8, 9):
-            return "Q1 (Jul–Sep)"
-        if m in (10, 11, 12):
-            return "Q2 (Oct–Dec)"
-        if m in (1, 2, 3):
-            return "Q3 (Jan–Mar)"
+        if m in (7, 8, 9): return "Q1 (Jul–Sep)"
+        if m in (10, 11, 12): return "Q2 (Oct–Dec)"
+        if m in (1, 2, 3): return "Q3 (Jan–Mar)"
         return "Q4 (Apr–Jun)"
-
     df["QUARTER"] = df["published_parsed"].apply(fy_quarter)
 
     return df
-
 
 df = load_data()
 if df.empty:
     st.error("❌ No data loaded. Please check Google Sheet & secrets setup.")
     st.stop()
+
+# ---------------- STYLE ----------------
+st.markdown(
+    f"""
+    <style>
+        .tile {{
+            background-color: white;
+            padding: 18px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-align: center;
+            margin-bottom: 10px;
+        }}
+        .tile h3 {{
+            margin: 0;
+            font-size: 16px;
+            color: {HELB_GREEN};
+        }}
+        .tile p {{
+            font-size: 26px;
+            font-weight: 600;
+            margin: 6px 0 0;
+        }}
+        .chart-tile {{
+            background-color: white;
+            padding: 14px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            margin-bottom: 18px;
+        }}
+        .stMultiSelect [data-baseweb="select"] > div {{
+            background-color: {HELB_GREEN} !important;
+            color: white !important;
+            border-radius: 8px;
+        }}
+        .stMultiSelect span, .stMultiSelect div[aria-label="Main select"] span {{
+            color: white !important;
+        }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.write("Overview — use the slicers to filter by Year, Financial Year, Quarter or Month.")
 
 # ---------------- SIDEBAR SLICERS ----------------
 st.sidebar.header("🔎 Filters (Slicers)")
@@ -210,30 +170,14 @@ st.sidebar.header("🔎 Filters (Slicers)")
 years_all = sorted([int(y) for y in df["YEAR"].dropna().unique()])
 fys_all = sorted([fy for fy in df["FINANCIAL_YEAR"].dropna().unique()])
 quarters_all = ["Q1 (Jul–Sep)", "Q2 (Oct–Dec)", "Q3 (Jan–Mar)", "Q4 (Apr–Jun)"]
-months_all = list(calendar.month_abbr)[1:]  # ["Jan", "Feb", ..., "Dec"]
+months_all = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 selected_years = st.sidebar.multiselect("Select Year(s)", years_all, default=[])
 selected_fys = st.sidebar.multiselect("Select Financial Year(s)", fys_all, default=[])
 selected_quarters = st.sidebar.multiselect("Select Quarter(s)", quarters_all, default=[])
 selected_months = st.sidebar.multiselect("Select Month(s)", months_all, default=[])
 
-# Quick keyword search in sidebar
-keyword = st.sidebar.text_input("Keyword search (title + summary)")
-
-# Debug toggle in sidebar
-show_debug = st.sidebar.checkbox("🛠 Show Debug Table")
-
-# Clear filters button
-if st.sidebar.button("Clear All Filters"):
-    selected_years = []
-    selected_fys = []
-    selected_quarters = []
-    selected_months = []
-    keyword = ""
-
-# ---------------- APPLY FILTERS ----------------
 filtered = df.copy()
-
 if selected_years:
     filtered = filtered[filtered["YEAR"].isin(selected_years)]
 if selected_fys:
@@ -243,13 +187,8 @@ if selected_quarters:
 if selected_months:
     filtered = filtered[filtered["MONTH"].isin(selected_months)]
 
-if keyword:
-    kw = keyword.strip().lower()
-    mask = (
-        filtered["title"].fillna("").str.lower().str.contains(kw)
-        | filtered["summary"].fillna("").str.lower().str.contains(kw)
-    )
-    filtered = filtered[mask]
+if st.sidebar.button("Clear All Filters"):
+    filtered = df.copy()
 
 # ---------------- KPI TILES ----------------
 col1, col2, col3, col4 = st.columns(4)
@@ -291,7 +230,7 @@ with colA:
             color_discrete_map={"Positive": HELB_GREEN, "Negative": HELB_RED, "Neutral": HELB_GREY},
         )
         fig_donut.update_traces(textposition="inside", textinfo="percent+label", insidetextfont=dict(color="white"))
-        fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=320)
+        fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=300)
         st.plotly_chart(fig_donut, use_container_width=True)
     else:
         st.info("No tonality data for selected filters.")
@@ -308,7 +247,7 @@ with colB:
         timeline["date"] = pd.to_datetime(timeline["date_only"])
         fig_line = px.line(timeline.sort_values("date"), x="date", y="count", markers=True)
         fig_line.update_traces(line_color=HELB_BLUE)
-        fig_line.update_layout(margin=dict(t=10, b=20, l=20, r=10), height=320)
+        fig_line.update_layout(margin=dict(t=10, b=20, l=20, r=10), height=300)
         st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("No date information available for selected filters.")
@@ -320,7 +259,7 @@ colC, colD = st.columns(2)
 with colC:
     st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
     st.subheader("Top News Sources")
-    src_counts = filtered["source"].fillna("Unknown").value_counts().head(8).reset_index()
+    src_counts = filtered["source"].fillna("Unknown").value_counts().head(7).reset_index()
     if not src_counts.empty:
         src_counts.columns = ["Source", "Count"]
         fig_bar = px.bar(
@@ -331,13 +270,13 @@ with colC:
             text="Count",
         )
         fig_bar.update_traces(marker_color=HELB_GREEN)
-        fig_bar.update_layout(margin=dict(t=6, b=6, l=6, r=6), yaxis=dict(dtick=1), height=320)
+        fig_bar.update_layout(margin=dict(t=6, b=6, l=6, r=6), yaxis=dict(dtick=1), height=300)
         st.plotly_chart(fig_bar, use_container_width=True)
     else:
         st.info("No source data for selected filters.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Chart D: Tonality Trend (Monthly area)
+# --- Chart D: Tonality Trend
 with colD:
     st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
     st.subheader("Tonality Trend Over Time (Monthly)")
@@ -358,7 +297,7 @@ with colD:
                 color="tonality_norm",
                 color_discrete_map={"Positive": HELB_GREEN, "Negative": HELB_RED, "Neutral": HELB_GREY},
             )
-            fig_area.update_layout(margin=dict(t=6, b=6, l=6, r=6), legend_title_text="Tonality", height=320)
+            fig_area.update_layout(margin=dict(t=6, b=6, l=6, r=6), legend_title_text="Tonality", height=300)
             st.plotly_chart(fig_area, use_container_width=True)
         else:
             st.info("No tonality trend data for selected filters.")
@@ -370,7 +309,7 @@ st.markdown("---")
 
 # ---------------- WORD CLOUD ----------------
 st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
-if st.button("☁️ Generate Word Cloud"):
+if st.button("☁️ View Word Cloud"):
     st.subheader("Keyword Word Cloud")
     title_col = "title" if "title" in filtered.columns else "TITLE"
     summary_col = "summary" if "summary" in filtered.columns else "SUMMARY"
@@ -397,15 +336,4 @@ if st.button("☁️ Generate Word Cloud"):
         st.pyplot(fig)
     else:
         st.info("No text available to generate word cloud.")
-st.markdown("</div>", unsafe_allow_html=True)
-
-# ---------------- DEBUG / RAW TABLE ----------------
-if show_debug:
-    st.markdown("---")
-    st.subheader("🧾 Debug / Raw Data (first 200 rows)")
-    disp_cols = ["title", "published", "published_parsed", "source", "tonality", "link"]
-    available = [c for c in disp_cols if c in df.columns]
-    st.dataframe(df[available].head(200))
-
-# Close wrapper
 st.markdown("</div>", unsafe_allow_html=True)
