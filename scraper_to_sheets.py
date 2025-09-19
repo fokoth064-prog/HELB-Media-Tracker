@@ -1,6 +1,6 @@
 # scraper_to_sheets.py
 """
-Scraper for HELB mentions in Kenyan news starting from Jan 1, 2025.
+Scraper for HELB mentions in Kenyan news starting from Jan 1 of the current year.
 Appends only NEW mentions to Google Sheet (deduplicated by link/title+date).
 """
 
@@ -13,6 +13,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import os
 import sys
 import time
+from datetime import datetime
 
 nltk.download("vader_lexicon", quiet=True)
 
@@ -23,7 +24,10 @@ SPREADSHEET_ID = None            # if you prefer ID, put it here
 HEADERS = ["title", "published", "source", "summary", "link", "tonality"]
 
 QUERY = "HELB Kenya"
-START_DATE = (2025, 1, 1)  # YYYY, MM, DD → fetch from Jan 1, 2025 onwards
+
+# ---- Dynamic start date: Jan 1 this year → today
+START_DATE = (datetime.now().year, 1, 1)
+END_DATE = datetime.now().timetuple()[:3]  # (YYYY, M, D)
 
 # ---------------- AUTH ----------------
 SCOPES = [
@@ -57,7 +61,7 @@ print(f"✅ Existing rows: {len(existing_records)}")
 
 # ---------------- Scrape News ----------------
 sia = SentimentIntensityAnalyzer()
-g = GNews(language="en", country="KE", start_date=START_DATE)
+g = GNews(language="en", country="KE", start_date=START_DATE, end_date=END_DATE)
 
 articles = g.get_news(QUERY) or []
 print(f"📰 Articles fetched: {len(articles)}")
