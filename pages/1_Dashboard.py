@@ -18,6 +18,7 @@ HELB_GREEN = "#008000"
 HELB_GOLD = "#FFD700"
 HELB_BLUE = "#1E90FF"
 HELB_RED = "#B22222"
+HELB_GREY = "#808080"
 HELB_COLORS = [HELB_GREEN, HELB_GOLD, HELB_BLUE, HELB_RED]
 
 # ---------------- LOAD DATA ----------------
@@ -83,6 +84,7 @@ st.markdown(
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             text-align: center;
+            margin-bottom: 20px;
         }}
         .tile h3 {{
             margin: 0;
@@ -93,6 +95,13 @@ st.markdown(
             font-size: 28px;
             font-weight: bold;
             margin: 5px 0 0;
+        }}
+        .chart-tile {{
+            background-color: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            margin-bottom: 20px;
         }}
         /* Style for slicers */
         .stMultiSelect [data-baseweb="select"] > div {{
@@ -157,7 +166,7 @@ with col2:
 with col3:
     st.markdown(f"<div class='tile'><h3>Negative</h3><p style='color:{HELB_RED};'>{len(negative)}</p></div>", unsafe_allow_html=True)
 with col4:
-    st.markdown(f"<div class='tile'><h3>Neutral</h3><p style='color:{HELB_GOLD};'>{len(neutral)}</p></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='tile'><h3>Neutral</h3><p style='color:{HELB_GREY};'>{len(neutral)}</p></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -165,26 +174,31 @@ st.markdown("---")
 col5, col6 = st.columns(2)
 
 with col5:
+    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
     st.subheader("Tonality Distribution")
     tonality_counts = filtered["tonality"].value_counts().reset_index()
     tonality_counts.columns = ["Tonality", "Count"]
     if not tonality_counts.empty:
-        fig_pie = px.pie(
+        fig_donut = px.pie(
             tonality_counts,
             names="Tonality",
             values="Count",
+            hole=0.5,  # doughnut style
             color="Tonality",
             color_discrete_map={
                 "Positive": HELB_GREEN,
                 "Negative": HELB_RED,
-                "Neutral": HELB_GOLD,
+                "Neutral": HELB_GREY,
             },
         )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        fig_donut.update_traces(textposition="inside", textinfo="percent+label")
+        st.plotly_chart(fig_donut, use_container_width=True)
     else:
         st.info("No data for selected filters.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 with col6:
+    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
     st.subheader("Mentions Over Time")
     timeline = filtered.groupby(filtered["published_parsed"].dt.date).size().reset_index(name="Count")
     if not timeline.empty:
@@ -193,10 +207,12 @@ with col6:
         st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("No data for selected filters.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # ---------------- WORD CLOUD ----------------
+st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
 st.subheader("☁️ Keyword Word Cloud")
 
 if not filtered.empty:
@@ -226,3 +242,4 @@ if not filtered.empty:
         st.info("No text available to generate word cloud.")
 else:
     st.info("No data available for current filters.")
+st.markdown("</div>", unsafe_allow_html=True)
