@@ -1,297 +1,170 @@
-# pages/1_Dashboard.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud, STOPWORDS
-import nltk
+import plotly.graph_objects as go
+import gspread
+from google.oauth2.service_account import Credentials
 
-# Ensure nltk stopwords are available
-nltk.download("stopwords", quiet=True)
-from nltk.corpus import stopwords as nltk_stopwords
+# ---------------- GOOGLE SHEETS LOADER ----------------
+@st.cache_data(ttl=600)
+def load_data():
+    scope = ["https://www.googleapis.com/auth/spreadsheets",
+             "https://www.googleapis.com/auth/drive"]
 
-# ---------------- CONFIG ----------------
-CSV_URL = "https://docs.google.com/spreadsheets/d/10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ/export?format=csv"
+    # Load credentials from Streamlit secrets
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"], scopes=scope
+    )
+    client = gspread.authorize(creds)
 
-# HELB Brand Colors
-HELB_GREEN = "#008000"
-HELB_GOLD = "#FFD700"
-HELB_BLUE = "#1E90FF"
-HELB_RED = "#B22222"
-HELB_GREY = "#808080"
-HELB_COLORS = [HELB_GREEN, HELB_GOLD, HELB_BLUE, HELB_RED]
+    # Open sheet by ID (replace with your sheet ID)
+    SHEET_ID = "10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ"
+    sh = client.open_by_key(SHEET_ID)
+    worksheet = sh.sheet1
 
-# ---------------- LOAD DATA ----------------
-@st.cache_data
-def load_data(csv_url):
-    try:
-        df = pd.read_csv(csv_url)
-    except Exception as e:
-        st.error(f"Failed to load CSV: {e}")
-        return pd.DataFrame()
+    records = worksheet.get_all_records()
+    df = pd.DataFrame(records)
 
-    df.columns = [c.strip().lower() for c in df.columns]
+    # Ensure datetime
+    if "published" in df.columns:
+        df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce")
 
-    for c in ["title", "summary", "source", "tonality", "link", "published"]:
-        if c not in df.columns:
-            df[c] = ""
-
-    df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce")
-    df["tonality_norm"] = df["tonality"].astype(str).str.strip().str.capitalize()
-
-    df["YEAR"] = df["published_parsed"].dt.year
-    df["MONTH_NUM"] = df["published_parsed"].dt.month
-    df["MONTH"] = df["published_parsed"].dt.strftime("%b")
-
-    fy = []
-    for d in df["published_parsed"]:
-        if pd.isnull(d):
-            fy.append(None)
-        else:
-            if d.month >= 7:
-                fy.append(f"{d.year}/{d.year+1}")
-            else:
-                fy.append(f"{d.year-1}/{d.year}")
-    df["FINANCIAL_YEAR"] = fy
-
-    def fy_quarter(date):
-        if pd.isnull(date):
-            return None
-        m = date.month
-        if m in (7, 8, 9):
-            return "Q1 (Jul–Sep)"
-        if m in (10, 11, 12):
-            return "Q2 (Oct–Dec)"
-        if m in (1, 2, 3):
-            return "Q3 (Jan–Mar)"
-        return "Q4 (Apr–Jun)"
-
-    df["QUARTER"] = df["published_parsed"].apply(fy_quarter)
     return df
 
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(page_title="HELB Dashboard", layout="wide")
+st.title("📊 HELB Kenya News Sentiment Monitor")
 
-df = load_data(CSV_URL)
+# ---------------- LOAD DATA ----------------
+df = load_data()
 
 if df.empty:
-    st.error("❌ No data loaded. Please check the CSV link and sharing settings.")
+    st.warning("No data found in Google Sheet.")
     st.stop()
 
-# ---------------- STYLE ----------------
-st.set_page_config(layout="wide", page_title="HELB Dashboard")
-st.markdown(
-    f"""
-    <style>
-        .tile {{
-            background-color: white;
-            padding: 18px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            text-align: center;
-            margin-bottom: 10px;
-        }}
-        .tile h3 {{
-            margin: 0;
-            font-size: 16px;
-            color: {HELB_GREEN};
-        }}
-        .tile p {{
-            font-size: 26px;
-            font-weight: 600;
-            margin: 6px 0 0;
-        }}
-        .chart-tile {{
-            background-color: white;
-            padding: 14px;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            margin-bottom: 18px;
-        }}
-        .stMultiSelect [data-baseweb="select"] > div {{
-            background-color: {HELB_GREEN} !important;
-            color: white !important;
-            border-radius: 8px;
-        }}
-        .stMultiSelect span, .stMultiSelect div[aria-label="Main select"] span {{
-            color: white !important;
-        }}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+# ---------------- FILTERS ----------------
+st.sidebar.header("Filters")
 
-st.title("📊 HELB Mentions Monitor")
-st.write("Overview — use the slicers to filter by Year, Financial Year, Quarter or Month.")
+# Year filter
+df["Year"] = df["published_parsed"].dt.year
+years = df["Year"].dropna().unique().tolist()
+selected_years = st.sidebar.multiselect("Select Year(s)", years, default=years)
 
-# ---------------- SIDEBAR SLICERS ----------------
-st.sidebar.header("🔎 Filters (Slicers)")
+# Financial Year filter
+def get_financial_year(date):
+    if pd.isna(date):
+        return None
+    year = date.year
+    return f"{year}/{year+1}" if date.month >= 7 else f"{year-1}/{year}"
 
-years_all = sorted([int(y) for y in df["YEAR"].dropna().unique()])
-fys_all = sorted([fy for fy in df["FINANCIAL_YEAR"].dropna().unique()])
-quarters_all = ["Q1 (Jul–Sep)", "Q2 (Oct–Dec)", "Q3 (Jan–Mar)", "Q4 (Apr–Jun)"]
-months_all = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+df["FinancialYear"] = df["published_parsed"].apply(get_financial_year)
+financial_years = df["FinancialYear"].dropna().unique().tolist()
+selected_fy = st.sidebar.multiselect("Select Financial Year(s)", financial_years, default=financial_years)
 
-selected_years = st.sidebar.multiselect("Select Year(s)", years_all, default=[])
-selected_fys = st.sidebar.multiselect("Select Financial Year(s)", fys_all, default=[])
-selected_quarters = st.sidebar.multiselect("Select Quarter(s)", quarters_all, default=[])
-selected_months = st.sidebar.multiselect("Select Month(s)", months_all, default=[])
+# Quarter filter
+def get_quarter(date):
+    if pd.isna(date):
+        return None
+    if date.month in [7, 8, 9]:
+        return "Q1"
+    elif date.month in [10, 11, 12]:
+        return "Q2"
+    elif date.month in [1, 2, 3]:
+        return "Q3"
+    elif date.month in [4, 5, 6]:
+        return "Q4"
 
-filtered = df.copy()
+df["Quarter"] = df["published_parsed"].apply(get_quarter)
+quarters = df["Quarter"].dropna().unique().tolist()
+selected_quarters = st.sidebar.multiselect("Select Quarter(s)", quarters, default=quarters)
+
+# Month filter
+df["Month"] = df["published_parsed"].dt.strftime("%B")
+months = df["Month"].dropna().unique().tolist()
+selected_months = st.sidebar.multiselect("Select Month(s)", months, default=months)
+
+# Date range filter
+min_date, max_date = df["published_parsed"].min(), df["published_parsed"].max()
+start_date = st.sidebar.date_input("Start Date", min_date.date() if pd.notna(min_date) else None)
+end_date = st.sidebar.date_input("End Date", max_date.date() if pd.notna(max_date) else None)
+
+# Apply filters
+filtered_df = df.copy()
 if selected_years:
-    filtered = filtered[filtered["YEAR"].isin(selected_years)]
-if selected_fys:
-    filtered = filtered[filtered["FINANCIAL_YEAR"].isin(selected_fys)]
+    filtered_df = filtered_df[filtered_df["Year"].isin(selected_years)]
+if selected_fy:
+    filtered_df = filtered_df[filtered_df["FinancialYear"].isin(selected_fy)]
 if selected_quarters:
-    filtered = filtered[filtered["QUARTER"].isin(selected_quarters)]
+    filtered_df = filtered_df[filtered_df["Quarter"].isin(selected_quarters)]
 if selected_months:
-    filtered = filtered[filtered["MONTH"].isin(selected_months)]
-
-if st.sidebar.button("Clear All Filters"):
-    filtered = df.copy()
+    filtered_df = filtered_df[filtered_df["Month"].isin(selected_months)]
+if start_date and end_date:
+    filtered_df = filtered_df[
+        (filtered_df["published_parsed"] >= pd.to_datetime(start_date)) &
+        (filtered_df["published_parsed"] <= pd.to_datetime(end_date))
+    ]
 
 # ---------------- KPI TILES ----------------
+st.subheader("Key Metrics")
+
 col1, col2, col3, col4 = st.columns(4)
 
-total_mentions = len(filtered)
-pos_count = int(filtered["tonality_norm"].str.lower().eq("positive").sum())
-neg_count = int(filtered["tonality_norm"].str.lower().eq("negative").sum())
-neu_count = int(filtered["tonality_norm"].str.lower().eq("neutral").sum())
-
 with col1:
-    st.markdown(f"<div class='tile'><h3>Total Mentions</h3><p style='color:{HELB_BLUE};'>{total_mentions}</p></div>", unsafe_allow_html=True)
+    st.metric("Total Mentions", len(filtered_df))
+
 with col2:
-    st.markdown(f"<div class='tile'><h3>Positive</h3><p style='color:{HELB_GREEN};'>{pos_count}</p></div>", unsafe_allow_html=True)
+    st.metric("Positive Mentions", (filtered_df["tonality"] == "Positive").sum())
+
 with col3:
-    st.markdown(f"<div class='tile'><h3>Negative</h3><p style='color:{HELB_RED};'>{neg_count}</p></div>", unsafe_allow_html=True)
+    st.metric("Negative Mentions", (filtered_df["tonality"] == "Negative").sum())
+
 with col4:
-    st.markdown(f"<div class='tile'><h3>Neutral</h3><p style='color:{HELB_GREY};'>{neu_count}</p></div>", unsafe_allow_html=True)
+    st.metric("Neutral Mentions", (filtered_df["tonality"] == "Neutral").sum())
 
-st.markdown("---")
+# ---------------- CHARTS ----------------
+st.subheader("Visual Analysis")
 
-# ---------------- CHARTS (2x2 grid) ----------------
-colA, colB = st.columns(2)
+col_left, col_right = st.columns(2)
 
-# --- Chart A: Tonality Doughnut
-with colA:
-    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
-    st.subheader("Tonality Distribution")
-    ton_order = ["Positive", "Negative", "Neutral"]
-    counts = filtered["tonality_norm"].value_counts().reindex(ton_order).fillna(0).astype(int)
-    donut_df = pd.DataFrame({"Tonality": counts.index, "Count": counts.values})
+# Doughnut chart for tonality
+with col_left:
+    tonality_counts = filtered_df["tonality"].value_counts()
+    fig_donut = go.Figure(data=[go.Pie(
+        labels=tonality_counts.index,
+        values=tonality_counts.values,
+        hole=0.5,
+        marker=dict(colors=["green", "red", "grey"]),
+        textfont=dict(color="white")
+    )])
+    fig_donut.update_layout(
+        title="Tonality Distribution",
+        height=300,
+        margin=dict(t=30, b=30, l=10, r=10)
+    )
+    st.plotly_chart(fig_donut, use_container_width=True)
 
-    if donut_df["Count"].sum() > 0:
-        fig_donut = px.pie(
-            donut_df,
-            names="Tonality",
-            values="Count",
-            hole=0.54,
-            color="Tonality",
-            color_discrete_map={"Positive": HELB_GREEN, "Negative": HELB_RED, "Neutral": HELB_GREY},
-        )
-        fig_donut.update_traces(textposition="inside", textinfo="percent+label", insidetextfont=dict(color="white"))
-        fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=300)
-        st.plotly_chart(fig_donut, use_container_width=True)
-    else:
-        st.info("No tonality data for selected filters.")
-    st.markdown("</div>", unsafe_allow_html=True)
+# Mentions over time
+with col_right:
+    mentions_ts = filtered_df.groupby(filtered_df["published_parsed"].dt.date).size().reset_index(name="count")
+    fig_line = px.line(mentions_ts, x="published_parsed", y="count", title="Mentions Over Time")
+    fig_line.update_layout(height=300, margin=dict(t=30, b=30, l=10, r=10))
+    st.plotly_chart(fig_line, use_container_width=True)
 
-# --- Chart B: Mentions Over Time
-with colB:
-    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
-    st.subheader("Mentions Over Time")
-    if filtered["published_parsed"].notna().any():
-        times = filtered.copy()
-        times["date_only"] = times["published_parsed"].dt.date
-        timeline = times.groupby("date_only").size().reset_index(name="count")
-        timeline["date"] = pd.to_datetime(timeline["date_only"])
-        fig_line = px.line(timeline.sort_values("date"), x="date", y="count", markers=True)
-        fig_line.update_traces(line_color=HELB_BLUE)
-        fig_line.update_layout(margin=dict(t=10, b=20, l=20, r=10), height=300)
-        st.plotly_chart(fig_line, use_container_width=True)
-    else:
-        st.info("No date information available for selected filters.")
-    st.markdown("</div>", unsafe_allow_html=True)
+# Row 2 charts
+col3, col4 = st.columns(2)
 
-colC, colD = st.columns(2)
+# Top Sources
+with col3:
+    top_sources = filtered_df["source"].value_counts().head(5)
+    fig_bar = px.bar(top_sources, x=top_sources.index, y=top_sources.values,
+                     title="Top 5 News Sources", labels={"x": "Source", "y": "Mentions"})
+    fig_bar.update_layout(height=300, margin=dict(t=30, b=30, l=10, r=10))
+    st.plotly_chart(fig_bar, use_container_width=True)
 
-# --- Chart C: Top Sources
-with colC:
-    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
-    st.subheader("Top News Sources")
-    src_counts = filtered["source"].fillna("Unknown").value_counts().head(7).reset_index()
-    if not src_counts.empty:
-        src_counts.columns = ["Source", "Count"]
-        fig_bar = px.bar(
-            src_counts.sort_values("Count"),
-            x="Count",
-            y="Source",
-            orientation="h",
-            text="Count",
-        )
-        fig_bar.update_traces(marker_color=HELB_GREEN)
-        fig_bar.update_layout(margin=dict(t=6, b=6, l=6, r=6), yaxis=dict(dtick=1), height=300)
-        st.plotly_chart(fig_bar, use_container_width=True)
-    else:
-        st.info("No source data for selected filters.")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# --- Chart D: Tonality Trend
-with colD:
-    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
-    st.subheader("Tonality Trend Over Time (Monthly)")
-    if filtered["published_parsed"].notna().any():
-        trend = (
-            filtered.assign(month=filtered["published_parsed"].dt.to_period("M").astype(str))
-            .groupby(["month", "tonality_norm"])
-            .size()
-            .reset_index(name="count")
-        )
-        if not trend.empty:
-            trend["month_dt"] = pd.to_datetime(trend["month"].astype(str) + "-01", errors="coerce")
-            trend = trend.sort_values("month_dt")
-            fig_area = px.area(
-                trend,
-                x="month",
-                y="count",
-                color="tonality_norm",
-                color_discrete_map={"Positive": HELB_GREEN, "Negative": HELB_RED, "Neutral": HELB_GREY},
-            )
-            fig_area.update_layout(margin=dict(t=6, b=6, l=6, r=6), legend_title_text="Tonality", height=300)
-            st.plotly_chart(fig_area, use_container_width=True)
-        else:
-            st.info("No tonality trend data for selected filters.")
-    else:
-        st.info("No date information for trend chart.")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown("---")
-
-# ---------------- WORD CLOUD ----------------
-st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
-if st.button("☁️ View Word Cloud"):
-    st.subheader("Keyword Word Cloud")
-    title_col = "title" if "title" in filtered.columns else "TITLE"
-    summary_col = "summary" if "summary" in filtered.columns else "SUMMARY"
-    texts = (filtered[title_col].astype(str) + " " + filtered[summary_col].astype(str)).tolist()
-    big_text = " ".join(texts).strip()
-    if big_text:
-        stop_words = set(nltk_stopwords.words("english")) | set(STOPWORDS)
-
-        def color_func(word, font_size, position, orientation, random_state=None, **kwargs):
-            idx = abs(hash(word)) % len(HELB_COLORS)
-            return HELB_COLORS[idx]
-
-        wc = WordCloud(
-            width=900,
-            height=400,
-            background_color="white",
-            stopwords=stop_words,
-            color_func=color_func,
-        ).generate(big_text)
-
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.imshow(wc, interpolation="bilinear")
-        ax.axis("off")
-        st.pyplot(fig)
-    else:
-        st.info("No text available to generate word cloud.")
-st.markdown("</div>", unsafe_allow_html=True)
+# Tonality Trend Over Time
+with col4:
+    trend = filtered_df.groupby([filtered_df["published_parsed"].dt.date, "tonality"]).size().reset_index(name="count")
+    fig_area = px.area(trend, x="published_parsed", y="count", color="tonality", title="Tonality Trend Over Time",
+                       color_discrete_map={"Positive": "green", "Negative": "red", "Neutral": "grey"})
+    fig_area.update_layout(height=300, margin=dict(t=30, b=30, l=10, r=10))
+    st.plotly_chart(fig_area, use_container_width=True)
