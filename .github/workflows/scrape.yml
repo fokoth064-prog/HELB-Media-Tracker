@@ -2,7 +2,7 @@ name: Daily HELB Scraper
 
 on:
   schedule:
-    - cron: '0 3 * * *'   # every day at 06:00 UTC
+    - cron: '0 3 * * *'   # every day at 03:00 UTC
   workflow_dispatch:     # allows manual run from the Actions tab
 
 jobs:
