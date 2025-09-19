@@ -5,8 +5,8 @@ import pandas as pd
 # ---------- CONFIG ----------
 CSV_URL = "https://docs.google.com/spreadsheets/d/10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ/export?format=csv"
 
-# ---------- HARD-CODED PASSWORD ----------
-EDITOR_PASSWORD = "MyHardSecret123"  # change this string anytime
+# ---------- PASSWORD ----------
+EDITOR_PASSWORD = "MyHardSecret123"
 password = st.sidebar.text_input("Enter edit password", type="password")
 is_editor = password == EDITOR_PASSWORD
 
@@ -19,11 +19,8 @@ else:
 @st.cache_data
 def load_data():
     df = pd.read_csv(CSV_URL)
-
-    # Normalize column names
     df.columns = [c.strip().lower() for c in df.columns]
 
-    # Parse dates
     if "published" in df.columns:
         df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce", utc=True)
         try:
@@ -37,13 +34,11 @@ def load_data():
         df["DATE"] = ""
         df["TIME"] = ""
 
-    # Ensure required columns exist
     for col in ["title", "summary", "source", "tonality", "link"]:
         if col not in df.columns:
             df[col] = ""
         df[col] = df[col].fillna("")
 
-    # Rename to uppercase
     rename_map = {
         "title": "TITLE",
         "summary": "SUMMARY",
@@ -54,31 +49,31 @@ def load_data():
     df = df.rename(columns=rename_map)
     return df
 
-# ---------- INITIALIZE SESSION STATE ----------
+# ---------- SESSION STATE ----------
 if "mentions_df" not in st.session_state:
     st.session_state["mentions_df"] = load_data()
 
 df = st.session_state["mentions_df"]
-
 if df.empty:
     st.info("No data available. Check the CSV URL.")
     st.stop()
 
-# Sort newest first
 df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
 
-# ---------- COLOR MAP (original) ----------
+# ---------- COLOR MAP ----------
 COLORS = {
-    "Positive": "#dff7df",  # light green
-    "Neutral": "#f3f3f3",   # light grey
-    "Negative": "#ffd6d6"   # light red
+    "Positive": "#b2e0b2",  # darker green
+    "Neutral": "#f3f3f3",
+    "Negative": "#ffb3b3"   # darker red
 }
 
-# ---------- DISPLAY MENTIONS ----------
+# ---------- DISPLAY ----------
 st.title("📰 Mentions — Media Coverage")
 
 for i in df.index:
-    # If editor, update tonality first
+    row = df.loc[i]
+
+    # Editor: update tonality first
     if is_editor:
         current_tonality = st.session_state["mentions_df"].at[i, "TONALITY"]
         new_tonality = st.selectbox(
@@ -90,12 +85,10 @@ for i in df.index:
         if new_tonality != current_tonality:
             st.session_state["mentions_df"].at[i, "TONALITY"] = new_tonality
 
-    # Get the current tonality from session_state (updated)
-    current_tonality = st.session_state["mentions_df"].at[i, "TONALITY"]
-    row = df.loc[i]
+    # Get updated tonality from session_state
+    display_tonality = st.session_state["mentions_df"].at[i, "TONALITY"]
+    bg_color = COLORS.get(display_tonality, "#ffffff")
 
-    # Colored div
-    bg_color = COLORS.get(current_tonality, "#ffffff")
     st.markdown(
         f"""
         <div style="background-color:{bg_color}; padding:15px; border-radius:8px; margin-bottom:10px;">
@@ -103,7 +96,7 @@ for i in df.index:
             <b>Source:</b> {row['SOURCE']}<br>
             <b>Title:</b> {row['TITLE']}<br>
             <b>Summary:</b> {row['SUMMARY']}<br>
-            <b>Tonality:</b> {current_tonality}
+            <b>Tonality:</b> {display_tonality}
         </div>
         """,
         unsafe_allow_html=True,
@@ -114,3 +107,4 @@ for i in df.index:
         st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
 
     st.markdown("---")
+
