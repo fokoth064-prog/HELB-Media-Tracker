@@ -5,7 +5,6 @@ import plotly.express as px
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud, STOPWORDS
 import nltk
-from io import BytesIO
 
 # Download stopwords if not already
 nltk.download("stopwords", quiet=True)
@@ -19,6 +18,7 @@ HELB_GREEN = "#008000"
 HELB_GOLD = "#FFD700"
 HELB_BLUE = "#1E90FF"
 HELB_RED = "#B22222"
+HELB_COLORS = [HELB_GREEN, HELB_GOLD, HELB_BLUE, HELB_RED]
 
 # ---------------- LOAD DATA ----------------
 @st.cache_data
@@ -31,8 +31,10 @@ def load_data(csv_url):
     else:
         df["published_parsed"] = pd.NaT
 
-    # Calendar Year
+    # Calendar Year & Month
     df["YEAR"] = df["published_parsed"].dt.year
+    df["MONTH_NUM"] = df["published_parsed"].dt.month
+    df["MONTH"] = df["published_parsed"].dt.strftime("%b")  # Jan, Feb...
 
     # Financial Year (July–June)
     fy = []
@@ -92,7 +94,7 @@ st.markdown(
             font-weight: bold;
             margin: 5px 0 0;
         }}
-        /* Style for Streamlit multiselect (slicers) */
+        /* Style for slicers */
         .stMultiSelect [data-baseweb="select"] > div {{
             background-color: {HELB_GREEN} !important;
             color: white !important;
@@ -115,15 +117,16 @@ st.write("An overview of HELB mentions, sentiment, and trends.")
 # ---------------- FILTERS (SLICERS) ----------------
 st.sidebar.header("🔎 Filters (Slicers)")
 
-# Available options from data
 years_all = sorted([int(y) for y in df["YEAR"].dropna().unique()])
 fys_all = sorted([fy for fy in df["FINANCIAL_YEAR"].dropna().unique()])
 quarters_all = ["Q1 (Jul–Sep)", "Q2 (Oct–Dec)", "Q3 (Jan–Mar)", "Q4 (Apr–Jun)"]
+months_all = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-# User selections
 selected_years = st.sidebar.multiselect("Select Year(s)", years_all, default=[])
 selected_fys = st.sidebar.multiselect("Select Financial Year(s)", fys_all, default=[])
 selected_quarters = st.sidebar.multiselect("Select Quarter(s)", quarters_all, default=[])
+selected_months = st.sidebar.multiselect("Select Month(s)", months_all, default=[])
 
 # Apply filters
 filtered = df.copy()
@@ -133,8 +136,9 @@ if selected_fys:
     filtered = filtered[filtered["FINANCIAL_YEAR"].isin(selected_fys)]
 if selected_quarters:
     filtered = filtered[filtered["QUARTER"].isin(selected_quarters)]
+if selected_months:
+    filtered = filtered[filtered["MONTH"].isin(selected_months)]
 
-# Reset option
 if st.sidebar.button("Clear All Filters"):
     filtered = df.copy()
 
@@ -147,25 +151,13 @@ negative = filtered[filtered["tonality"] == "Negative"]
 neutral = filtered[filtered["tonality"] == "Neutral"]
 
 with col1:
-    st.markdown(
-        f"<div class='tile'><h3>Total Mentions</h3><p style='color:{HELB_BLUE};'>{total_mentions}</p></div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"<div class='tile'><h3>Total Mentions</h3><p style='color:{HELB_BLUE};'>{total_mentions}</p></div>", unsafe_allow_html=True)
 with col2:
-    st.markdown(
-        f"<div class='tile'><h3>Positive</h3><p style='color:{HELB_GREEN};'>{len(positive)}</p></div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"<div class='tile'><h3>Positive</h3><p style='color:{HELB_GREEN};'>{len(positive)}</p></div>", unsafe_allow_html=True)
 with col3:
-    st.markdown(
-        f"<div class='tile'><h3>Negative</h3><p style='color:{HELB_RED};'>{len(negative)}</p></div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"<div class='tile'><h3>Negative</h3><p style='color:{HELB_RED};'>{len(negative)}</p></div>", unsafe_allow_html=True)
 with col4:
-    st.markdown(
-        f"<div class='tile'><h3>Neutral</h3><p style='color:{HELB_GOLD};'>{len(neutral)}</p></div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"<div class='tile'><h3>Neutral</h3><p style='color:{HELB_GOLD};'>{len(neutral)}</p></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -194,11 +186,7 @@ with col5:
 
 with col6:
     st.subheader("Mentions Over Time")
-    timeline = (
-        filtered.groupby(filtered["published_parsed"].dt.date)
-        .size()
-        .reset_index(name="Count")
-    )
+    timeline = filtered.groupby(filtered["published_parsed"].dt.date).size().reset_index(name="Count")
     if not timeline.empty:
         fig_line = px.line(timeline, x="published_parsed", y="Count", markers=True)
         fig_line.update_traces(line_color=HELB_BLUE)
@@ -212,23 +200,29 @@ st.markdown("---")
 st.subheader("☁️ Keyword Word Cloud")
 
 if not filtered.empty:
-    # Combine TITLE + SUMMARY for word cloud
-    texts = (filtered["title"].astype(str) + " " + filtered["summary"].astype(str)).tolist()
+    # Handle uppercase or lowercase columns
+    title_col = "TITLE" if "TITLE" in filtered.columns else "title"
+    summary_col = "SUMMARY" if "SUMMARY" in filtered.columns else "summary"
+
+    texts = (filtered[title_col].astype(str) + " " + filtered[summary_col].astype(str)).tolist()
     big_text = " ".join(texts)
 
-    stop_words = set(nltk_stopwords.words("english")) | set(STOPWORDS)
+    if big_text.strip():
+        stop_words = set(nltk_stopwords.words("english")) | set(STOPWORDS)
+        wc = WordCloud(
+            width=800,
+            height=400,
+            background_color="white",
+            colormap="tab10",
+            color_func=lambda *args, **kwargs: HELB_COLORS[hash(args[0]) % len(HELB_COLORS)],
+            stopwords=stop_words,
+        ).generate(big_text)
 
-    wc = WordCloud(
-        width=800,
-        height=400,
-        background_color="white",
-        colormap="Dark2",
-        stopwords=stop_words,
-    ).generate(big_text)
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.imshow(wc, interpolation="bilinear")
-    ax.axis("off")
-    st.pyplot(fig)
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.imshow(wc, interpolation="bilinear")
+        ax.axis("off")
+        st.pyplot(fig)
+    else:
+        st.info("No text available to generate word cloud.")
 else:
-    st.info("No text available to generate word cloud for current filters.")
+    st.info("No data available for current filters.")
