@@ -175,5 +175,131 @@ with col4:
 
 st.markdown("---")
 
-# ---------------- (Charts + Wordcloud remain unchanged) ----------------
-# your existing Chart A–D and Wordcloud code goes here
+# ---------------- CHARTS (2x2 grid) ----------------
+colA, colB = st.columns(2)
+
+# --- Chart A: Tonality Doughnut
+with colA:
+    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
+    st.subheader("Tonality Distribution")
+    ton_order = ["Positive", "Negative", "Neutral"]
+    counts = filtered["tonality_norm"].value_counts().reindex(ton_order).fillna(0).astype(int)
+    donut_df = pd.DataFrame({"Tonality": counts.index, "Count": counts.values})
+
+    if donut_df["Count"].sum() > 0:
+        fig_donut = px.pie(
+            donut_df,
+            names="Tonality",
+            values="Count",
+            hole=0.54,
+            color="Tonality",
+            color_discrete_map={"Positive": HELB_GREEN, "Negative": HELB_RED, "Neutral": HELB_GREY},
+        )
+        fig_donut.update_traces(textposition="inside", textinfo="percent+label", insidetextfont=dict(color="white"))
+        fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=300)
+        st.plotly_chart(fig_donut, use_container_width=True)
+    else:
+        st.info("No tonality data for selected filters.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# --- Chart B: Mentions Over Time
+with colB:
+    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
+    st.subheader("Mentions Over Time")
+    if filtered["published_parsed"].notna().any():
+        times = filtered.copy()
+        times["date_only"] = times["published_parsed"].dt.date
+        timeline = times.groupby("date_only").size().reset_index(name="count")
+        timeline["date"] = pd.to_datetime(timeline["date_only"])
+        fig_line = px.line(timeline.sort_values("date"), x="date", y="count", markers=True)
+        fig_line.update_traces(line_color=HELB_BLUE)
+        fig_line.update_layout(margin=dict(t=10, b=20, l=20, r=10), height=300)
+        st.plotly_chart(fig_line, use_container_width=True)
+    else:
+        st.info("No date information available for selected filters.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+colC, colD = st.columns(2)
+
+# --- Chart C: Top Sources
+with colC:
+    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
+    st.subheader("Top News Sources")
+    src_counts = filtered["source"].fillna("Unknown").value_counts().head(7).reset_index()
+    if not src_counts.empty:
+        src_counts.columns = ["Source", "Count"]
+        fig_bar = px.bar(
+            src_counts.sort_values("Count"),
+            x="Count",
+            y="Source",
+            orientation="h",
+            text="Count",
+        )
+        fig_bar.update_traces(marker_color=HELB_GREEN)
+        fig_bar.update_layout(margin=dict(t=6, b=6, l=6, r=6), yaxis=dict(dtick=1), height=300)
+        st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+        st.info("No source data for selected filters.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# --- Chart D: Tonality Trend
+with colD:
+    st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
+    st.subheader("Tonality Trend Over Time (Monthly)")
+    if filtered["published_parsed"].notna().any():
+        trend = (
+            filtered.assign(month=filtered["published_parsed"].dt.to_period("M").astype(str))
+            .groupby(["month", "tonality_norm"])
+            .size()
+            .reset_index(name="count")
+        )
+        if not trend.empty:
+            trend["month_dt"] = pd.to_datetime(trend["month"].astype(str) + "-01", errors="coerce")
+            trend = trend.sort_values("month_dt")
+            fig_area = px.area(
+                trend,
+                x="month",
+                y="count",
+                color="tonality_norm",
+                color_discrete_map={"Positive": HELB_GREEN, "Negative": HELB_RED, "Neutral": HELB_GREY},
+            )
+            fig_area.update_layout(margin=dict(t=6, b=6, l=6, r=6), legend_title_text="Tonality", height=300)
+            st.plotly_chart(fig_area, use_container_width=True)
+        else:
+            st.info("No tonality trend data for selected filters.")
+    else:
+        st.info("No date information for trend chart.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ---------------- WORD CLOUD ----------------
+st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
+if st.button("☁️ View Word Cloud"):
+    st.subheader("Keyword Word Cloud")
+    title_col = "title" if "title" in filtered.columns else "TITLE"
+    summary_col = "summary" if "summary" in filtered.columns else "SUMMARY"
+    texts = (filtered[title_col].astype(str) + " " + filtered[summary_col].astype(str)).tolist()
+    big_text = " ".join(texts).strip()
+    if big_text:
+        stop_words = set(nltk_stopwords.words("english")) | set(STOPWORDS)
+
+        def color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+            idx = abs(hash(word)) % len(HELB_COLORS)
+            return HELB_COLORS[idx]
+
+        wc = WordCloud(
+            width=900,
+            height=400,
+            background_color="white",
+            stopwords=stop_words,
+            color_func=color_func,
+        ).generate(big_text)
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.imshow(wc, interpolation="bilinear")
+        ax.axis("off")
+        st.pyplot(fig)
+    else:
+        st.info("No text available to generate word cloud.")
+st.markdown("</div>", unsafe_allow_html=True)
