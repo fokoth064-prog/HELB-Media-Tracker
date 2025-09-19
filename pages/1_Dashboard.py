@@ -98,7 +98,7 @@ st.markdown(
         }}
         .chart-tile {{
             background-color: white;
-            padding: 15px;
+            padding: 20px;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             margin-bottom: 20px;
@@ -191,7 +191,11 @@ with col5:
                 "Neutral": HELB_GREY,
             },
         )
-        fig_donut.update_traces(textposition="inside", textinfo="percent+label")
+        fig_donut.update_traces(
+            textposition="inside",
+            textinfo="percent+label",
+            insidetextfont=dict(color="white"),  # make all text white
+        )
         st.plotly_chart(fig_donut, use_container_width=True)
     else:
         st.info("No data for selected filters.")
@@ -213,33 +217,32 @@ st.markdown("---")
 
 # ---------------- WORD CLOUD ----------------
 st.markdown("<div class='chart-tile'>", unsafe_allow_html=True)
-st.subheader("☁️ Keyword Word Cloud")
+if st.button("☁️ View Word Cloud"):
+    st.subheader("Keyword Word Cloud")
+    if not filtered.empty:
+        title_col = "TITLE" if "TITLE" in filtered.columns else "title"
+        summary_col = "SUMMARY" if "SUMMARY" in filtered.columns else "summary"
 
-if not filtered.empty:
-    # Handle uppercase or lowercase columns
-    title_col = "TITLE" if "TITLE" in filtered.columns else "title"
-    summary_col = "SUMMARY" if "SUMMARY" in filtered.columns else "summary"
+        texts = (filtered[title_col].astype(str) + " " + filtered[summary_col].astype(str)).tolist()
+        big_text = " ".join(texts)
 
-    texts = (filtered[title_col].astype(str) + " " + filtered[summary_col].astype(str)).tolist()
-    big_text = " ".join(texts)
+        if big_text.strip():
+            stop_words = set(nltk_stopwords.words("english")) | set(STOPWORDS)
+            wc = WordCloud(
+                width=800,
+                height=400,
+                background_color="white",
+                colormap="tab10",
+                color_func=lambda *args, **kwargs: HELB_COLORS[hash(args[0]) % len(HELB_COLORS)],
+                stopwords=stop_words,
+            ).generate(big_text)
 
-    if big_text.strip():
-        stop_words = set(nltk_stopwords.words("english")) | set(STOPWORDS)
-        wc = WordCloud(
-            width=800,
-            height=400,
-            background_color="white",
-            colormap="tab10",
-            color_func=lambda *args, **kwargs: HELB_COLORS[hash(args[0]) % len(HELB_COLORS)],
-            stopwords=stop_words,
-        ).generate(big_text)
-
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.imshow(wc, interpolation="bilinear")
-        ax.axis("off")
-        st.pyplot(fig)
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.imshow(wc, interpolation="bilinear")
+            ax.axis("off")
+            st.pyplot(fig)
+        else:
+            st.info("No text available to generate word cloud.")
     else:
-        st.info("No text available to generate word cloud.")
-else:
-    st.info("No data available for current filters.")
+        st.info("No data available for current filters.")
 st.markdown("</div>", unsafe_allow_html=True)
