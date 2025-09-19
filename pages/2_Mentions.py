@@ -62,8 +62,8 @@ if "tonality_map" not in st.session_state:
 
 COLORS = {
     "Positive": "#3b8132",
-    "Neutral": "#AAA7AD",
-    "Negative": "#ff9999"
+    "Neutral": "#6E6F71",
+    "Negative": "#d1001f"
 }
 
 st.title("📰 Mentions — Media Coverage")
