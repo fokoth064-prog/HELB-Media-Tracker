@@ -71,7 +71,7 @@ st.markdown(
 
         /* spacing to push app content below sticky header */
         .app-body {{
-            padding-top: 110px;
+            padding-top: 130px;
         }}
 
         /* Sidebar branding */
@@ -132,6 +132,16 @@ st.markdown(
 
 # wrapper to push content down (so header doesn't overlap)
 st.markdown('<div class="app-body">', unsafe_allow_html=True)
+
+# ---------------- BIG PAGE TITLE ----------------
+st.markdown(
+    f"""
+    <h1 style='text-align:center; color:{HELB_GREEN}; font-weight:900;'>
+        HELB MEDIA MONITORING DASHBOARD
+    </h1>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ---------------- LOAD DATA ----------------
 @st.cache_data(ttl=600)
@@ -417,10 +427,4 @@ try:
         try:
             latest_local = pd.to_datetime(latest).tz_convert("Africa/Nairobi").strftime("%Y-%m-%d %H:%M %Z")
         except Exception:
-            latest_local = pd.to_datetime(latest).strftime("%Y-%m-%d %H:%M")
-        st.markdown(f"**Last data timestamp (latest article):** {latest_local}")
-except Exception:
-    pass
-
-# end wrapper
-st.markdown("</div>", unsafe_allow_html=True)
+            latest_local = pd.to_datetime(latest).strftime("%Y-%m-%
