@@ -17,12 +17,19 @@ except Exception as e:
     st.error(f"Error loading dataset: {e}")
     st.stop()
 
-# Ensure correct column names (adjust if your sheet differs)
-required_cols = {"date", "source", "title", "sentiment"}
-if not required_cols.issubset(df.columns):
-    st.error(f"Dataset must contain columns: {required_cols}")
-    st.write("Columns found:", df.columns.tolist())
-    st.stop()
+# -------------------------------
+# Rename columns to standard names
+# -------------------------------
+col_map = {
+    "published": "date",
+    "tonality": "sentiment",
+    "title": "title",
+    "source": "source"
+}
+df = df.rename(columns=col_map)
+
+# Keep only the needed columns
+df = df[["date", "source", "title", "sentiment"]]
 
 # Convert date column to datetime
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
@@ -103,4 +110,3 @@ st.download_button(
     "text/csv",
     key="download-csv",
 )
-
