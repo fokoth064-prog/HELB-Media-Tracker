@@ -33,7 +33,10 @@ filtered = df[
 if not filtered.empty:
     st.write("### Mentions View")
 
-    for _, row in filtered.iterrows():
+    # Sort latest first
+    filtered = filtered.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
+
+    for i, row in filtered.iterrows():
         # background colors by tonality
         if row['tonality'] == "Positive":
             color = "#228B22"  # darker green
@@ -49,14 +52,19 @@ if not filtered.empty:
             f"""
             <div style="background-color:{color}; color:{text_color}; 
                         padding:15px; border-radius:10px; margin-bottom:10px">
-                <b>{row['title']}</b><br>
-                <i>{row['published_parsed'].date()} | {row['source']}</i><br><br>
+                <b>{i+1}. {row['title']}</b><br>
+                <i>Date: {row['published_parsed'].strftime("%d %B %Y")} | Source: {row['source']}</i><br><br>
                 {row['summary']}<br><br>
                 <b>Tonality:</b> {row['tonality']}
             </div>
             """,
             unsafe_allow_html=True
         )
+
+        # Add "Read More" button if link exists
+        if 'link' in row and pd.notna(row['link']):
+            st.markdown(f"[🔗 Read full story]({row['link']})", unsafe_allow_html=True)
+        st.markdown("---")  # separator
 else:
     st.warning("No mentions available for selected filters.")
 
