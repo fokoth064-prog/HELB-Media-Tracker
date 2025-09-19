@@ -7,6 +7,7 @@ from wordcloud import WordCloud, STOPWORDS
 import nltk
 import gspread
 from google.oauth2.service_account import Credentials
+import calendar
 
 # Ensure nltk stopwords are available
 nltk.download("stopwords", quiet=True)
@@ -47,13 +48,21 @@ def load_data():
         if c not in df.columns:
             df[c] = ""
 
-    df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce")
+    # --- ensure dates parse properly
+    df["published"] = df["published"].astype(str).str.strip()
+    df["published_parsed"] = pd.to_datetime(
+        df["published"],
+        errors="coerce",
+        dayfirst=True,   # handles formats like 19/09/2025
+        utc=True
+    )
+
     df["tonality_norm"] = df["tonality"].astype(str).str.strip().str.capitalize()
 
     # --- extra fields
     df["YEAR"] = df["published_parsed"].dt.year
     df["MONTH_NUM"] = df["published_parsed"].dt.month
-    df["MONTH"] = df["published_parsed"].dt.strftime("%b")
+    df["MONTH"] = df["published_parsed"].dt.strftime("%b")  # "Jan", "Feb", "Sep"
 
     fy = []
     for d in df["published_parsed"]:
@@ -136,7 +145,7 @@ st.sidebar.header("🔎 Filters (Slicers)")
 years_all = sorted([int(y) for y in df["YEAR"].dropna().unique()])
 fys_all = sorted([fy for fy in df["FINANCIAL_YEAR"].dropna().unique()])
 quarters_all = ["Q1 (Jul–Sep)", "Q2 (Oct–Dec)", "Q3 (Jan–Mar)", "Q4 (Apr–Jun)"]
-months_all = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+months_all = list(calendar.month_abbr)[1:]  # ["Jan", "Feb", ..., "Dec"]
 
 selected_years = st.sidebar.multiselect("Select Year(s)", years_all, default=[])
 selected_fys = st.sidebar.multiselect("Select Financial Year(s)", fys_all, default=[])
@@ -303,3 +312,8 @@ if st.button("☁️ View Word Cloud"):
     else:
         st.info("No text available to generate word cloud.")
 st.markdown("</div>", unsafe_allow_html=True)
+
+# ---------------- DEBUGGING ----------------
+if st.sidebar.checkbox("🛠 Show Debug Table"):
+    st.subheader("Debugging Table")
+    st.dataframe(df[["published", "published_parsed", "MONTH", "YEAR"]].head(50))
