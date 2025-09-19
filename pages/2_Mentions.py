@@ -68,29 +68,29 @@ COLORS = {
 
 st.title("📰 Mentions — Media Coverage")
 
-# ---------- EDITOR INTERFACE ----------
+# ---------- EXECUTE UPDATE BUTTON IN SIDEBAR ----------
+if is_editor:
+    if st.sidebar.button("Execute Update"):
+        for i in df.index:
+            key = f"tonality_{i}"
+            if key in st.session_state:
+                st.session_state["tonality_map"][i] = st.session_state[key]
+        st.sidebar.success("Tonality changes applied! Colours updated below.")
+
+# ---------- EDITOR DROPDOWNS ----------
 if is_editor:
     st.subheader("Edit Tonality")
-    edited_values = {}
-
     for i in df.index:
         current = st.session_state["tonality_map"][i]
-        new_val = st.selectbox(
+        st.selectbox(
             f"{i+1}. {df.at[i, 'TITLE'][:50]}...",
             options=["Positive", "Neutral", "Negative"],
             index=["Positive","Neutral","Negative"].index(current) if current in ["Positive","Neutral","Negative"] else 1,
             key=f"tonality_{i}"
         )
-        edited_values[i] = new_val
-
-    if st.button("Submit Changes"):
-        for idx, val in edited_values.items():
-            st.session_state["tonality_map"][idx] = val
-        st.success("Tonality updated! Display refreshed.")
-
-st.subheader("Mentions List")
 
 # ---------- DISPLAY MENTIONS ----------
+st.subheader("Mentions List")
 for i in df.index:
     row = df.loc[i]
     tonality = st.session_state["tonality_map"][i]
@@ -113,3 +113,14 @@ for i in df.index:
             st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
     st.markdown("---")
 
+# ---------- DOWNLOAD UPDATED CSV ----------
+st.subheader("Export Updated Mentions")
+updated_df = df.copy()
+updated_df["TONALITY"] = [st.session_state["tonality_map"][i] for i in df.index]
+csv_bytes = updated_df.to_csv(index=False).encode("utf-8")
+st.download_button(
+    "📥 Download Updated Mentions CSV",
+    data=csv_bytes,
+    file_name="updated_mentions.csv",
+    mime="text/csv"
+)
