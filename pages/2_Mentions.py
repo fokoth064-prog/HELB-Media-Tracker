@@ -67,7 +67,7 @@ if df.empty:
 # Sort newest first
 df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=True)
 
-# ---------- COLOR MAP (restored to previous) ----------
+# ---------- COLOR MAP (original) ----------
 COLORS = {
     "Positive": "#dff7df",  # light green
     "Neutral": "#f3f3f3",   # light grey
@@ -79,6 +79,7 @@ st.title("📰 Mentions — Media Coverage")
 
 for i, row in df.iterrows():
     with st.container():
+        # Always show colored div with tonality
         bg_color = COLORS.get(row["TONALITY"], "#ffffff")
         st.markdown(
             f"""
@@ -87,12 +88,13 @@ for i, row in df.iterrows():
                 <b>Source:</b> {row['SOURCE']}<br>
                 <b>Title:</b> {row['TITLE']}<br>
                 <b>Summary:</b> {row['SUMMARY']}<br>
+                <b>Tonality:</b> {row['TONALITY']}
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        # Editable tonality only for editor
+        # Editable tonality only for editor, below the div
         if is_editor:
             new_tonality = st.selectbox(
                 f"Update Tonality for mention #{i+1}",
@@ -102,11 +104,10 @@ for i, row in df.iterrows():
             )
             if new_tonality != row["TONALITY"]:
                 st.session_state["mentions_df"].at[i, "TONALITY"] = new_tonality
-        else:
-            st.markdown(f"**Tonality:** {row['TONALITY']}")
 
         # Read full story link
         if row["LINK"].startswith("http"):
             st.markdown(f"[🔗 Read Full Story]({row['LINK']})")
 
         st.markdown("---")
+
