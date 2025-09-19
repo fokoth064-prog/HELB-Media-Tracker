@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
+import os
 
 # ---------- CONFIG ----------
 CSV_URL = "https://docs.google.com/spreadsheets/d/10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ/export?format=csv"
+LOCAL_CSV = "persistent_mentions.csv"  # File to save updates
 EDITOR_PASSWORD = "MyHardSecret123"
 
 # ---------- PASSWORD ----------
@@ -16,7 +18,11 @@ else:
 # ---------- LOAD DATA ----------
 @st.cache_data
 def load_data():
-    df = pd.read_csv(CSV_URL)
+    # Load persistent CSV if it exists
+    if os.path.exists(LOCAL_CSV):
+        df = pd.read_csv(LOCAL_CSV)
+    else:
+        df = pd.read_csv(CSV_URL)
     df.columns = [c.strip().lower() for c in df.columns]
     if "published" in df.columns:
         df["published_parsed"] = pd.to_datetime(df["published"], errors="coerce", utc=True)
@@ -59,19 +65,18 @@ df = df.sort_values(by="published_parsed", ascending=False).reset_index(drop=Tru
 if "tonality_map" not in st.session_state:
     st.session_state["tonality_map"] = {i: df.at[i, "TONALITY"] for i in df.index}
 
-# Color codes
+# ---------- COLOR CODES ----------
 COLORS = {
     "Positive": "#3b8132",
     "Neutral": "#6E6F71",
     "Negative": "#d1001f"
 }
 
-# ---------- EDITOR PANEL IN SIDEBAR (SCROLLABLE) ----------
+# ---------- EDITOR PANEL (SCROLLABLE) ----------
 if is_editor:
     st.sidebar.subheader("Edit Tonality")
     edited_values = {}
 
-    # Use a container with fixed max height and scroll
     with st.sidebar.container():
         st.markdown(
             '<div style="max-height:600px; overflow-y:auto; padding-right:5px;">', 
@@ -88,11 +93,16 @@ if is_editor:
             edited_values[i] = new_val
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Execute update button below editor
+    # Execute update button
     if st.sidebar.button("Execute Update"):
         for idx, val in edited_values.items():
             st.session_state["tonality_map"][idx] = val
-        st.sidebar.success("Tonality changes applied! Colours updated below.")
+        # Save updated CSV for persistence
+        updated_df = df.copy()
+        updated_df["TONALITY"] = [st.session_state["tonality_map"][i] for i in df.index]
+        updated_df.to_csv(LOCAL_CSV, index=False)
+        st.sidebar.success("Tonality changes applied and saved! Colours updated below.")
+        st.experimental_rerun()  # Refresh page to apply colors immediately
 
 # ---------- DISPLAY MENTIONS ----------
 st.title("📰 Mentions — Media Coverage")
@@ -102,7 +112,6 @@ for i in df.index:
     row = df.loc[i]
     tonality = st.session_state["tonality_map"][i]
     bg_color = COLORS.get(tonality, "#ffffff")
-    # Ensure text is always visible regardless of theme
     text_color = "#ffffff" if tonality in ["Positive", "Negative"] else "#ffffff"
 
     st.markdown(
@@ -129,12 +138,13 @@ for i in df.index:
 
 # ---------- DOWNLOAD UPDATED CSV ----------
 st.subheader("Export Updated Mentions")
-updated_df = df.copy()
-updated_df["TONALITY"] = [st.session_state["tonality_map"][i] for i in df.index]
-csv_bytes = updated_df.to_csv(index=False).encode("utf-8")
+export_df = df.copy()
+export_df["TONALITY"] = [st.session_state["tonality_map"][i] for i in df.index]
+csv_bytes = export_df.to_csv(index=False).encode("utf-8")
 st.download_button(
     "📥 Download Updated Mentions CSV",
     data=csv_bytes,
     file_name="updated_mentions.csv",
     mime="text/csv"
 )
+
