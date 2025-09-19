@@ -62,7 +62,7 @@ if "tonality_map" not in st.session_state:
 
 COLORS = {
     "Positive": "#3b8132",
-    "Neutral": "#f3f3f3",
+    "Neutral": "#AAA7AD",
     "Negative": "#ff9999"
 }
 
