@@ -465,10 +465,25 @@ else:
 # ---------------- DEBUG / RAW TABLE ----------------
 if show_debug:
     st.markdown("---")
-    st.subheader("🧾 Debug / Raw Data (first 200 rows)")
-    disp_cols = ["title", "published", "published_parsed", "source", "tonality", "link"]
-    available = [c for c in disp_cols if c in df.columns]
-    st.dataframe(df[available].head(200))
+    st.subheader("🧾 Top 10 Recent Mentions")
+    df_debug = (
+        filtered.sort_values("published_parsed", ascending=False)
+        .head(10)
+        .copy()
+    )
+    df_debug["link"] = df_debug["link"].apply(
+        lambda x: f"[Read Story]({x})" if pd.notna(x) and str(x).startswith("http") else ""
+    )
+    disp_cols = ["title", "published_parsed", "source", "tonality_norm", "link"]
+    st.dataframe(df_debug[disp_cols])
+
+# ---------------- FOOTER ----------------
+st.markdown(
+    f"""<div class="footer">Developed by Fred Okoth</div>""",
+    unsafe_allow_html=True,
+)
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------- FOOTER ----------------
 st.markdown(
