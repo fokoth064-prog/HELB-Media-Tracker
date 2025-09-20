@@ -1,112 +1,168 @@
-# app_streamlit.py
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from wordcloud import WordCloud
-import altair as alt
+import gspread
+from google.oauth2.service_account import Credentials
+import time
 
-# ----------------- CONFIG -----------------
-st.set_page_config(page_title="HELB Media Monitoring Dashboard", layout="wide")
+# ---------------------------
+# Page config
+# ---------------------------
+st.set_page_config(
+    page_title="HELB Media Monitoring Dashboard",
+    layout="wide"
+)
 
-# ----------------- CUSTOM HEADER -----------------
+# ---------------------------
+# Load Data with Retry
+# ---------------------------
+@st.cache_data(ttl=600)
+def load_data():
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets",
+                 "https://www.googleapis.com/auth/drive"]
+
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], scopes=scope
+        )
+        client = gspread.authorize(creds)
+
+        SHEET_ID = "10LcDId4y2vz5mk7BReXL303-OBa2QxsN3drUcefpdSQ"
+        sh = client.open_by_key(SHEET_ID)
+        worksheet = sh.sheet1
+
+        # retry wrapper
+        def safe_get_records(ws, retries=3, delay=5):
+            for i in range(retries):
+                try:
+                    return ws.get_all_records()
+                except Exception as e:
+                    if i < retries - 1:
+                        time.sleep(delay)
+                    else:
+                        raise e
+
+        records = safe_get_records(worksheet)
+        df = pd.DataFrame(records)
+
+        # ensure correct datetime
+        if "Date" in df.columns:
+            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
+        return df
+
+    except Exception as e:
+        st.error(f"❌ Failed to load Google Sheet: {e}")
+        return pd.DataFrame()
+
+df = load_data()
+
+# ---------------------------
+# Dashboard Title
+# ---------------------------
 st.markdown(
     """
-    <style>
-    .header-container {
-        background-color: #006400; /* HELB green */
-        padding: 15px;
-        text-align: center;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        z-index: 100;
-    }
-    .header-container h1 {
-        color: white;
-        font-size: 28px;
-        margin: 0;
-        font-weight: bold;
-    }
-    .reportview-container {
-        margin-top: 90px;
-    }
-    </style>
-    <div class="header-container">
-        <h1>HELB MEDIA MONITORING DASHBOARD</h1>
+    <div style="background-color:#006400;padding:15px;border-radius:10px;">
+        <h1 style="color:white;text-align:center;">HELB MEDIA MONITORING DASHBOARD</h1>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-# ----------------- LOAD DATA -----------------
-SHEET_URL = "https://docs.google.com/spreadsheets/d/your_sheet_id_here/export?format=csv"
-df = pd.read_csv(SHEET_URL)
+# ---------------------------
+# Filters
+# ---------------------------
+if not df.empty:
+    st.sidebar.header("Filter Data")
 
-# Clean & process
-df["published"] = pd.to_datetime(df["published"], errors="coerce")
-df = df.dropna(subset=["published"])
+    # Date filter
+    min_date, max_date = df["Date"].min(), df["Date"].max()
+    date_range = st.sidebar.date_input(
+        "Select Date Range",
+        [min_date, max_date],
+        min_value=min_date,
+        max_value=max_date
+    )
 
-# ----------------- SIDEBAR FILTERS -----------------
-st.sidebar.header("Filters")
-start_date = st.sidebar.date_input("Start Date", df["published"].min().date())
-end_date = st.sidebar.date_input("End Date", df["published"].max().date())
-sentiments = st.sidebar.multiselect("Sentiment", options=df["tonality"].unique(), default=list(df["tonality"].unique()))
+    # Platform filter
+    platforms = st.sidebar.multiselect(
+        "Select Platforms",
+        options=df["Platform"].unique(),
+        default=df["Platform"].unique()
+    )
 
-mask = (df["published"].dt.date >= start_date) & (df["published"].dt.date <= end_date) & (df["tonality"].isin(sentiments))
-filtered_df = df.loc[mask]
+    # Apply filters
+    filtered_df = df[
+        (df["Date"].between(pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1]))) &
+        (df["Platform"].isin(platforms))
+    ]
 
-# ----------------- KPIs -----------------
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Mentions", len(filtered_df))
-col2.metric("Unique Sources", filtered_df["source"].nunique())
-col3.metric("Sentiment Split", f"{filtered_df['tonality'].value_counts(normalize=True).mul(100).round(1).to_dict()}")
+    # ---------------------------
+    # KPIs
+    # ---------------------------
+    total_mentions = len(filtered_df)
+    positive_mentions = len(filtered_df[filtered_df["Sentiment"] == "Positive"])
+    negative_mentions = len(filtered_df[filtered_df["Sentiment"] == "Negative"])
+    neutral_mentions = len(filtered_df[filtered_df["Sentiment"] == "Neutral"])
 
-# ----------------- TREND CHART -----------------
-st.subheader("📈 Mentions Over Time")
-trend = filtered_df.groupby(filtered_df["published"].dt.to_period("M")).size().reset_index(name="counts")
-trend["published"] = trend["published"].dt.to_timestamp()
+    st.markdown("### 📊 Key Metrics")
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    kpi1.metric("Total Mentions", total_mentions)
+    kpi2.metric("Positive Mentions", positive_mentions)
+    kpi3.metric("Negative Mentions", negative_mentions)
+    kpi4.metric("Neutral Mentions", neutral_mentions)
 
-line_chart = alt.Chart(trend).mark_line(point=True).encode(
-    x="published:T",
-    y="counts:Q",
-    tooltip=["published:T", "counts:Q"]
-).properties(width=800, height=400)
+    # ---------------------------
+    # Charts
+    # ---------------------------
+    st.markdown("### 📈 Trends and Visualizations")
+    col1, col2 = st.columns(2)
 
-st.altair_chart(line_chart, use_container_width=True)
+    with col1:
+        st.markdown("**Mentions Over Time**")
+        mentions_over_time = filtered_df.groupby("Date").size()
+        fig, ax = plt.subplots(figsize=(6, 4))
+        mentions_over_time.plot(ax=ax, marker="o")
+        ax.set_ylabel("Number of Mentions")
+        ax.set_xlabel("Date")
+        st.pyplot(fig)
 
-# ----------------- TOP SOURCES -----------------
-st.subheader("🏆 Top Sources")
-top_sources = filtered_df["source"].value_counts().head(10).reset_index()
-top_sources.columns = ["source", "mentions"]
+    with col2:
+        st.markdown("**Sentiment Distribution**")
+        sentiment_counts = filtered_df["Sentiment"].value_counts()
+        fig, ax = plt.subplots(figsize=(6, 4))
+        sns.barplot(x=sentiment_counts.index, y=sentiment_counts.values, palette="Set2", ax=ax)
+        ax.set_ylabel("Count")
+        ax.set_xlabel("Sentiment")
+        st.pyplot(fig)
 
-bar_chart = alt.Chart(top_sources).mark_bar().encode(
-    x="mentions:Q",
-    y=alt.Y("source:N", sort="-x"),
-    tooltip=["source", "mentions"]
-).properties(width=800, height=400)
+    # ---------------------------
+    # Word Cloud
+    # ---------------------------
+    st.markdown("### ☁️ Word Cloud")
+    all_text = " ".join(filtered_df["Content"].dropna().astype(str))
+    if all_text.strip():
+        wordcloud = WordCloud(width=800, height=400, background_color="white").generate(all_text)
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.imshow(wordcloud, interpolation="bilinear")
+        ax.axis("off")
+        st.pyplot(fig)
+    else:
+        st.info("No content available to generate word cloud.")
 
-st.altair_chart(bar_chart, use_container_width=True)
-
-# ----------------- WORD CLOUD -----------------
-st.subheader("☁ Word Cloud of Mentions")
-text = " ".join(filtered_df["summary"].dropna().astype(str).tolist())
-if text.strip():
-    wc = WordCloud(width=800, height=400, background_color="white", colormap="Greens").generate(text)
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.imshow(wc, interpolation="bilinear")
-    ax.axis("off")
-    st.pyplot(fig)
 else:
-    st.info("No text available to generate Word Cloud.")
+    st.warning("No data available. Please check your Google Sheet.")
 
-# ----------------- FOOTER -----------------
+# ---------------------------
+# Footer
+# ---------------------------
 st.markdown(
     """
     <hr>
-    <div style='text-align: center; color: gray;'>
-        Developed by Fred Okoth
+    <div style="text-align:center; padding:10px; color:gray;">
+        Developed by <b>Fred Okoth</b>
     </div>
     """,
     unsafe_allow_html=True
