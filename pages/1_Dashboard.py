@@ -341,3 +341,4 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------- FOOTER ----------------
 st.markdown("<div class='footer'>Developed by Fred Okoth</div>", unsafe_allow_html=True)
+
