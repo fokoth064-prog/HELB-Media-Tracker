@@ -1,8 +1,9 @@
 # scraper_to_sheets.py
 """
 Scraper for HELB mentions in Kenyan news starting from Jan 1, 2025.
-Appends only NEW mentions to Google Sheet (deduplicated by link/title+date).
-Cleans historical rows so all published dates are normalized.
+- Cleans 'published' dates into YYYY-MM-DD
+- Removes mentions before Jan 1, 2025
+- Appends only NEW mentions (deduplicated by link/title+date)
 """
 
 from gnews import GNews
@@ -25,6 +26,7 @@ HEADERS = ["title", "published", "source", "summary", "link", "tonality"]
 
 QUERY = "HELB Kenya"
 START_DATE = (2025, 1, 1)  # YYYY, MM, DD → fetch from Jan 1, 2025 onwards
+CUTOFF_DATE = pd.Timestamp("2025-01-01")
 
 # ---------------- AUTH ----------------
 SCOPES = [
@@ -55,7 +57,7 @@ df = pd.DataFrame(existing_records)
 
 print(f"✅ Existing rows before cleaning: {len(df)}")
 
-# ---------------- CLEAN PUBLISHED DATES ----------------
+# ---------------- CLEAN + FILTER ----------------
 def clean_date(val):
     if not val or pd.isna(val):
         return ""
@@ -75,12 +77,14 @@ def clean_date(val):
 
 if not df.empty and "published" in df.columns:
     df["published"] = df["published"].apply(clean_date)
+    # Keep only mentions from Jan 1, 2025 onwards
+    df = df[df["published"] >= CUTOFF_DATE.strftime("%Y-%m-%d")]
 
-    # Push cleaned data back to Google Sheet
+    # Push cleaned + filtered data back
     values = [df.columns.tolist()] + df.values.tolist()
     worksheet.clear()
     worksheet.update(values)
-    print("🧹 Cleaned historical 'published' dates in sheet")
+    print(f"🧹 Cleaned and kept only mentions since {CUTOFF_DATE.date()}")
 
 # ---------------- Refresh Records After Cleaning ----------------
 existing_records = worksheet.get_all_records()
@@ -124,6 +128,9 @@ for a in articles:
             published = published_parsed.tz_convert("Africa/Nairobi").strftime("%Y-%m-%d")
         except Exception:
             published = published_parsed.strftime("%Y-%m-%d")
+
+    if published and published < CUTOFF_DATE.strftime("%Y-%m-%d"):
+        continue  # skip old mentions
 
     text_for_sent = summary if summary else title
     score = sia.polarity_scores(text_for_sent)["compound"]
