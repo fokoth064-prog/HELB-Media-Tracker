@@ -161,7 +161,7 @@ st.markdown(
 
     <div class="hero-banner">
         <h1>HELB MEDIA MONITORING DASHBOARD</h1>
-        <p>Live media mentions, sentiment and trends — powered by automated monitoring</p>
+        <p>Automated live media mentions, sentiment and trends </p>
     </div>
     """,
     unsafe_allow_html=True,
